@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    mkv = MKVFile("/home/dev/sup-convert/test-files/The Seven Deadly Sins S01E10.mkv")
+    mkv = MKVFile("test-files/The Seven Deadly Sins S01E10.mkv")
 
     savable: typing.List[typing.Tuple[MKVTrack, SubRipFile]] = []
     
@@ -22,10 +22,10 @@ def main():
         if track.track_type == "subtitles": 
             items = []
             
-            tmp_file = f"/home/dev/sup-convert/tmp/{track.track_id}-{track.track_codec}.sup"
+            tmp_file = f"tmp/{track.track_id}-{track.track_codec}.sup"
             cmd = ['mkvextract', track.file_path, 'tracks', f'{track.track_id}:{tmp_file}']
             check_output(cmd)
-            pgs = Pgs(data_reader=open(tmp_file, mode="rb").read, temp_folder="/home/dev/sup-convert/tmp")
+            pgs = Pgs(data_reader=open(tmp_file, mode="rb").read, temp_folder="tmp")
 
             test = pgs.items[0:10]
             
@@ -48,7 +48,7 @@ def main():
         path = path + (".forced" if track.forced_track else "")
         path = path + ("." + track.language if track.language != None else "")
         
-        potential_path = f"/home/dev/sup-convert/results/{path}.srt"
+        potential_path = f"results/{path}.srt"
         
         
         logger.info(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
