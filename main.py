@@ -8,12 +8,28 @@ import logging
 import pytesseract as tess
 import typing
 
+from vllm import LLM, SamplingParams
+from vllm.model_executor.models.deepseek_ocr import NGramPerReqLogitsProcessor
+from PIL import Image
+import os
+
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 def main():
+    os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
+
+    llm = LLM(
+    model="deepseek-ai/DeepSeek-OCR",
+    enable_prefix_caching=False,
+    mm_processor_cache_gb=0,
+    logits_processors=[NGramPerReqLogitsProcessor],
+    trust_remote_code=True
+    )
+    prompt = "<|vision_start|><|image_pad|><|vision_end|>\nFree OCR."
+
     mkv = MKVFile("test-files/The Seven Deadly Sins S01E10.mkv")
 
     savable: typing.List[typing.Tuple[MKVTrack, SubRipFile]] = []
@@ -30,6 +46,34 @@ def main():
             test = pgs.items[0:10]
             
             for index, item in enumerate(test, start=1):
+                
+                image = Image.fromarray(item.image.data)
+                image.save(f"tmp/{track.file_id}-{index}.png")
+                image = Image.open(f"tmp/{track.file_id}-{index}.png")
+
+                model_input = [
+                    {
+                        "prompt": prompt,
+                        "multi_modal_data": {"image": image}
+                    }
+                ]
+
+                sampling_param = SamplingParams(
+                            temperature=0.0,
+                            max_tokens=8192,
+                            # ngram logit processor args
+                            extra_args=dict(
+                                ngram_size=30,
+                                window_size=90,
+                                whitelist_token_ids={128821, 128822},  # whitelist: <td>, </td>
+                            ),
+                            skip_special_tokens=False,
+                )
+                model_outputs = llm.generate(model_input, sampling_param)
+
+                for output in model_outputs:
+                    logger.info(f"text: {output.outputs[0].text}")
+
                 
                 text = tess.image_to_string(image=Image.fromarray(item.image.data))
                 
