@@ -1,6 +1,6 @@
 {
-  "name": "ROCm PyTorch Dev",
-  "image": "rocm/pytorch:latest",
+  "name": "Custom ROCm PyTorch Dev",
+  "build": { "dockerfile": "Dockerfile" },
 
   "runArgs": [
     "--cap-add=SYS_PTRACE",
