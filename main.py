@@ -8,6 +8,7 @@ from langcodes import *
 from model_core import OCRModelCore, LanguageModelCore
 from subtitle_track_manager import SubtitleTrackManager
 from torch.multiprocessing import Pool, set_start_method
+from itertools import chain
 import numpy as np
 import logging
 import pytesseract as tess
@@ -42,8 +43,11 @@ class Runnable:
         self.language_model = LanguageModelCore(torch_device=self.torch_device)
 
 
-    def run(self, sub_managers: list):
-        for index, (image, item, track) in enumerate(sub_managers, start=1):
+    def run(self, pgs_data: list):
+        if not pgs_data:
+            return False
+
+        for index, (image, item, track) in enumerate(pgs_data, start=1):
             items = []
             combined = []
 
@@ -67,10 +71,15 @@ class Runnable:
 
             items.append(SubRipItem(index=index, start=item.start, end=item.end, text=text))
 
-        track, SubRipFile(items=items), combined
+        logger.info(Fore.GREEN + f"Finished" + Fore.RESET)
 
 
-def save_file(savable: typing.Tuple[MKVTrack, SubRipFile, list]):
+
+def save_file(savable: typing.Tuple[MKVTrack, SubRipFile, list] | None):
+
+    if savable == None:
+        return
+
     unique = 1
     for track, srt, combined in savable:
         if not combined:
@@ -121,7 +130,6 @@ def save_file(savable: typing.Tuple[MKVTrack, SubRipFile, list]):
 
 def main():
     os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
-    os.environ["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
 
     task = "ocr"
     prompts = {
@@ -134,17 +142,16 @@ def main():
 
     root = Path("test-files")
     convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
-    sup_managers = sum([SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles],[])
-    
-    logger.info(sup_managers)
+    pgs_data = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
 
     try:
          set_start_method("forkserver", force=True)
     except RuntimeError:
         pass
+
     pool = Pool(processes=2)
-    for result in pool.imap_unordered(Runnable(prompts=prompts, task=task).run, sup_managers):
-        save_file(savable=result)
+    for _ in pool.imap_unordered(Runnable(prompts=prompts, task=task).run, pgs_data):
+        pass
  
     
 if __name__=="__main__":
