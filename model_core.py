@@ -36,7 +36,7 @@ class LanguageModelCore:
 
     def predict(self, text: str) -> torch.Tensor:
         self.model.to(self.torch_device)
-        self.model.eval()
+        self.model.eval().share_memory()
         tokenized = self.tokenizer(text, padding='max_length', truncation=True, max_length=128, return_tensors="pt")
         input_ids = tokenized['input_ids']
         attention_mask = tokenized['attention_mask']
@@ -83,7 +83,7 @@ class OCRModelCore:
             trust_remote_code=True,
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2", 
-        ).to(dtype=torch.bfloat16, device=self.torch_device).eval()
+        ).to(dtype=torch.bfloat16, device=self.torch_device).eval().share_memory()
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
 
     def analyse(self, messages: list) ->  str:

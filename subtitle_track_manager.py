@@ -1,9 +1,6 @@
 from dataclasses import dataclass
 from colorama import Fore
-from pymkv import MKVFile, MKVTrack
-from media import PgsSubtitleItem
-from PIL import Image
-from typing import Generator
+from pymkv import MKVFile
 from pgs_manager import PgsManager
 import logging
 
@@ -23,7 +20,7 @@ class SubtitleTrackManager:
         self.options = options
 
 
-    def get_pgs_managers_data(self) -> Generator[Image, PgsSubtitleItem, MKVTrack]:
-        return (PgsManager(mkv_track=track, options=self.options).get_pgs_images() for track in self.tracks)
+    def get_pgs_managers(self) -> list:
+        return [PgsManager(mkv_track=track, options=self.options).get_pgs_images() for track in self.tracks]
 
 
