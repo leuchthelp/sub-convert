@@ -107,6 +107,6 @@ class OCRModelCore:
         text = self.processor.batch_decode(out, skip_special_tokens=True)[0]
         text = str(text).partition("Assistant: ")[2]
 
-        logger.info(Fore.CYAN+ f"clean text: {text}" + Fore.RESET)
+        logger.debug(Fore.CYAN+ f"clean text: {text}" + Fore.RESET)
 
         return text
