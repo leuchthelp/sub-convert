@@ -7,12 +7,12 @@ from colorama import Fore
 from langcodes import *
 from model_core import OCRModelCore, LanguageModelCore
 from subtitle_track_manager import SubtitleTrackManager
-from torch.multiprocessing import Pool, set_start_method
+from torch.multiprocessing import Pool, set_start_method, current_process
 from itertools import chain
+from pgs_manager import PgsManager
 import numpy as np
 import logging
 import pytesseract as tess
-import typing
 import torch
 import os
 
@@ -43,14 +43,16 @@ class Runnable:
         self.language_model = LanguageModelCore(torch_device=self.torch_device)
 
 
-    def run(self, pgs_data: list):
+    def run(self, pgs_manager: PgsManager) -> dict[str, MKVTrack | list]:
+        
+        pgs_data = pgs_manager.get_pgs_images()
         if not pgs_data:
-            return False
+            return {}
 
+        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} on {current_process()}" + Fore.RESET)
+
+        savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
-            items = []
-            combined = []
-
             messages = [
                 {"role": "user",         
                  "content": [
@@ -66,66 +68,63 @@ class Runnable:
                 text = tess.image_to_string(image=image)
             else:
                 probabilities = self.language_model.predict(text=text)
-                combined.append(self.language_model.get_topk(probabilities=probabilities))
+                combined = self.language_model.get_topk(probabilities=probabilities)
 
 
-            items.append(SubRipItem(index=index, start=item.start, end=item.end, text=text))
+            sub_item = SubRipItem(index=index, start=item.start, end=item.end, text=text)
+            
+            savable["track"] = track
+            savable["items"].append(sub_item)
+            savable["combined"].append(combined)
+        
+        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}/{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
+        return savable
 
-        logger.info(Fore.GREEN + f"Finished" + Fore.RESET)
 
+def save_file(savable: dict[str, MKVTrack | list]):
+    combined = savable["combined"]
+    srt      = SubRipFile(savable["items"])
+    track    = savable["track"]
 
+    path = Path(track.file_path).name.replace(".mkv", "")
+    counter = Counter()
+    average = {}
+    weights = {}
 
-def save_file(savable: typing.Tuple[MKVTrack, SubRipFile, list] | None):
+    for both in combined:
+        for label, prob in both:
+            counter.update([label])
+            if label not in average:
+                average[label] = [prob]
+            else:
+                average[label].append(prob)
 
-    if savable == None:
-        return
+    logger.debug(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
 
-    unique = 1
-    for track, srt, combined in savable:
-        if not combined:
-            break
+    for label, count in counter.items():
+        weights[label] = count / counter.total()
+    for label, prob in average.items():
+        average[label] = np.average(prob) * weights[label]
 
-        path = Path(track.file_path).name.replace(".mkv", "")
-        counter = Counter()
-        average = {}
-        weights = {}
+    logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
 
-        for both in combined:
-            for label, prob in both:
-                counter.update([label])
-                if label not in average:
-                    average[label] = [prob]
-                else:
-                    average[label].append(prob)
+    final_lang = max(average, key=average.get)
 
-        logger.info(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
+    logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
-        for label, count in counter.items():
-            weights[label] = count / counter.total()
+    path = path + (".sdh" if track.flag_hearing_impaired else "")
+    path = path + (".forced" if track.forced_track else "")
+    path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
+    potential_path = f"results/{path}.srt"
 
-        for label, prob in average.items():
-            average[label] = np.average(prob) * weights[label]
+    logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
 
-        logger.info(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
-        logger.info(average)
+    unique = 0
+    while Path(potential_path).exists():
+        unique += 1
+        potential_path = potential_path.replace(path, f"{path}-{unique}")
 
-        final_lang = max(average, key=average.get)
-
-        print(final_lang)
-
-        path = path + (".sdh" if track.flag_hearing_impaired else "")
-        path = path + (".forced" if track.forced_track else "")
-        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
-
-        potential_path = f"results/{path}.srt"
-
-        logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
-
-        if Path(potential_path).exists():
-            potential_path = potential_path.replace(path, f"{path}-{unique}")
-            unique += 1
-
-        srt.save(path=potential_path)
+    srt.save(path=potential_path)
 
 
 def main():
@@ -149,9 +148,13 @@ def main():
     except RuntimeError:
         pass
 
-    pool = Pool(processes=2)
-    for _ in pool.imap_unordered(Runnable(prompts=prompts, task=task).run, pgs_data):
-        pass
+    runnable = Runnable(prompts=prompts, task=task)
+
+    pool = Pool(processes=6)
+    for result in pool.imap_unordered(runnable.run, pgs_data):
+        if not result:
+            continue
+        save_file(savable=result)
  
     
 if __name__=="__main__":
