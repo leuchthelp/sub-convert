@@ -10,6 +10,13 @@ from subtitle_track_manager import SubtitleTrackManager
 from torch.multiprocessing import Pool, set_start_method, current_process
 from itertools import chain
 from pgs_manager import PgsManager
+from rich.progress import (
+    Progress,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    TimeRemainingColumn,
+)
 import numpy as np
 import logging
 import pytesseract as tess
@@ -19,6 +26,11 @@ import os
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+class SubtitleProgressBar(Progress):
+
+    def __init__(self):
+        pass
 
 
 @dataclass
@@ -47,6 +59,13 @@ class Runnable:
         self.ocr_model      = OCRModelCore(torch_device=self.torch_device)
         self.language_model = LanguageModelCore(torch_device=self.torch_device)
 
+        self.progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+        )
+
 
     def run(self, pgs_manager: PgsManager) -> dict[str, MKVTrack | list]:
         
@@ -54,7 +73,7 @@ class Runnable:
         if not pgs_data:
             return {}
 
-        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
+        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
 
         savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
@@ -82,9 +101,7 @@ class Runnable:
             savable["items"].append(sub_item)
             savable["combined"].append(combined)
         
-        savable["mkv_file"] = pgs_manager.mkv_file
-        
-        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
+        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         return savable
 
 
@@ -120,13 +137,24 @@ class Runnable:
 
         logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
+        forced = True if track.forced_track or len(items) <= 150 else False
+
         path = path + (".sdh" if track.flag_hearing_impaired else "")
-        path = path + (".forced" if track.forced_track or len(items) <= 150 else "")
+        path = path + (".forced" if forced else "")
         path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
         potential_path = f"{Path(track.file_path).parent}/{path}.srt"
 
         logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
 
+        logger.debug(f"{self.override_if_exists == True} and {Path(potential_path)} exists: {Path(potential_path).exists()}")
+        if self.override_if_exists == True and Path(potential_path).exists():
+            Path(potential_path).unlink()
+        else:
+            unique = 0
+            while Path(potential_path).exists():
+                unique += 1
+            potential_path = potential_path.replace(path, f"{path}-{unique}" if unique != 0 else f"{path}")
+            
         srt.save(path=potential_path)
 
 
@@ -152,7 +180,7 @@ def main():
     except RuntimeError:
         pass
 
-    runnable = Runnable(prompts=prompts, task=task)
+    runnable = Runnable(prompts=prompts, task=task, options=options)
 
     pool = Pool(processes=6)
     for result in pool.imap_unordered(runnable.run, pgs_data):
