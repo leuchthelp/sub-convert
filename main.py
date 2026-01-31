@@ -28,7 +28,12 @@ class Runnable:
             self,
             prompts: dict,
             task: str,
+            options={},
         ):
+        if not options:
+            self.override_if_exists = False
+        else:
+            self.override_if_exists = options["override_if_exists"]
 
         self.fallback = False
         try:
@@ -49,7 +54,7 @@ class Runnable:
         if not pgs_data:
             return {}
 
-        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} on {current_process()}" + Fore.RESET)
+        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
 
         savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
@@ -77,54 +82,52 @@ class Runnable:
             savable["items"].append(sub_item)
             savable["combined"].append(combined)
         
-        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}/{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
+        savable["mkv_file"] = pgs_manager.mkv_file
+        
+        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{pgs_manager.mkv_track.file_path}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         return savable
 
 
-def save_file(savable: dict[str, MKVTrack | list]):
-    combined = savable["combined"]
-    srt      = SubRipFile(savable["items"])
-    track    = savable["track"]
+    def save_file(self, savable: dict[str, MKVTrack | list]):
+        combined = savable["combined"]
+        items    = savable["items"]
+        srt      = SubRipFile(items=items)
+        track    = savable["track"]
 
-    path = Path(track.file_path).name.replace(".mkv", "")
-    counter = Counter()
-    average = {}
-    weights = {}
+        path = Path(track.file_path).name.replace(".mkv", "")
+        counter = Counter()
+        average = {}
+        weights = {}
 
-    for both in combined:
-        for label, prob in both:
-            counter.update([label])
-            if label not in average:
-                average[label] = [prob]
-            else:
-                average[label].append(prob)
+        for both in combined:
+            for label, prob in both:
+                counter.update([label])
+                if label not in average:
+                    average[label] = [prob]
+                else:
+                    average[label].append(prob)
 
-    logger.debug(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
+        logger.debug(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
 
-    for label, count in counter.items():
-        weights[label] = count / counter.total()
-    for label, prob in average.items():
-        average[label] = np.average(prob) * weights[label]
+        for label, count in counter.items():
+            weights[label] = count / counter.total()
+        for label, prob in average.items():
+            average[label] = np.average(prob) * weights[label]
 
-    logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
+        logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
 
-    final_lang = max(average, key=average.get)
+        final_lang = max(average, key=average.get)
 
-    logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
+        logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
-    path = path + (".sdh" if track.flag_hearing_impaired else "")
-    path = path + (".forced" if track.forced_track else "")
-    path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
-    potential_path = f"results/{path}.srt"
+        path = path + (".sdh" if track.flag_hearing_impaired else "")
+        path = path + (".forced" if track.forced_track or len(items) <= 150 else "")
+        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
+        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
 
-    logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
+        logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
 
-    unique = 0
-    while Path(potential_path).exists():
-        unique += 1
-        potential_path = potential_path.replace(path, f"{path}-{unique}")
-
-    srt.save(path=potential_path)
+        srt.save(path=potential_path)
 
 
 def main():
@@ -136,7 +139,8 @@ def main():
     }
 
     options = {
-        "path_to_tmp": "tmp"
+        "path_to_tmp": "tmp",
+        "override_if_exists": True
     }
 
     root = Path("test-files")
@@ -154,7 +158,7 @@ def main():
     for result in pool.imap_unordered(runnable.run, pgs_data):
         if not result:
             continue
-        save_file(savable=result)
+        runnable.save_file(savable=result)
  
     
 if __name__=="__main__":
