@@ -7,7 +7,7 @@ from colorama import Fore
 from langcodes import *
 from model_core import OCRModelCore, LanguageModelCore
 from subtitle_track_manager import SubtitleTrackManager
-from torch.multiprocessing import Pool, set_start_method, current_process
+from torch.multiprocessing import Pool, set_start_method, current_process, Queue, Manager
 from itertools import chain
 from pgs_manager import PgsManager
 from rich.progress import (
@@ -16,6 +16,7 @@ from rich.progress import (
     BarColumn,
     TaskProgressColumn,
     TimeRemainingColumn,
+    MofNCompleteColumn,
 )
 import numpy as np
 import logging
@@ -40,6 +41,8 @@ class Runnable:
             self,
             prompts: dict,
             task: str,
+            task_queue: Queue,
+            progress_queue: Queue,
             options={},
         ):
         if not options:
@@ -59,12 +62,8 @@ class Runnable:
         self.ocr_model      = OCRModelCore(torch_device=self.torch_device)
         self.language_model = LanguageModelCore(torch_device=self.torch_device)
 
-        self.progress = Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TimeRemainingColumn(),
-        )
+        self.task_queue = task_queue
+        self.progress_queue = progress_queue
 
 
     def run(self, pgs_manager: PgsManager) -> dict[str, MKVTrack | list]:
@@ -73,7 +72,9 @@ class Runnable:
         if not pgs_data:
             return {}
 
-        logger.info(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
+        logger.debug(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
+        
+        self.task_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}", len(pgs_data)))
 
         savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
@@ -100,8 +101,10 @@ class Runnable:
             savable["track"] = track
             savable["items"].append(sub_item)
             savable["combined"].append(combined)
+
+            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
         
-        logger.info(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
+        logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         return savable
 
 
@@ -173,20 +176,62 @@ def main():
 
     root = Path("test-files")
     convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
-    pgs_data = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
+    manager = Manager()
+    task_queue = manager.Queue()
+    progress_queue = manager.Queue()
+    pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
 
     try:
          set_start_method("forkserver", force=True)
     except RuntimeError:
         pass
 
-    runnable = Runnable(prompts=prompts, task=task, options=options)
+    runnable = Runnable(prompts=prompts, task=task, options=options, task_queue=task_queue, progress_queue=progress_queue)
 
-    pool = Pool(processes=6)
-    for result in pool.imap_unordered(runnable.run, pgs_data):
-        if not result:
-            continue
-        runnable.save_file(savable=result)
+    progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+        )
+    
+
+    with progress:
+        with Pool(processes=6) as pool:
+            tasks = {}
+            end = False
+            for results in pool.imap_unordered(runnable.run, pgs_managers):
+                while end == False:
+
+                    if task_queue.empty() == False:
+                        description, total = task_queue.get_nowait()
+                        task_id = progress.add_task(description=description, total=total)
+
+                        task = [task for task in progress.tasks if task.id == task_id][0]
+                        tasks[description] = (task_id, task)
+
+
+                    if progress_queue.empty() == False:
+                        description = progress_queue.get_nowait()
+                        if description in tasks:
+                            task_id = tasks[description][0]
+                            progress.update(task_id=task_id, advance=1)
+
+                            task = tasks[description][1]
+                            if task.finished:
+                                progress.update(task_id=task.id, visible=False)
+                                del tasks[description]
+
+
+                    if progress.finished:
+                        end = True
+                
+
+                if not results:
+                    continue
+                runnable.save_file(savable=results)
+        
  
     
 if __name__=="__main__":
