@@ -20,6 +20,7 @@ from pathlib import Path
 from langcodes import *
 import pytesseract as tess
 import numpy as np
+import argparse
 import logging
 import torch
 import os
@@ -167,17 +168,32 @@ class Runnable:
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        prog="PGS subtitle conversion using OCR and language identification on MKV files.",
+        description="run python based PGS subtitle recognition",
+    )
+    parser.add_argument("-p", "--path", type=str, default="", help="Directory path to .mkv files. Will recursively scan subdirectories.")
+    parser.add_argument("-o", "--override", type=bool, default=False, help="Override existing .srt file. Default: False")
+    args = parser.parse_args()
+
     task = "ocr"
     prompts = {
         "ocr": "OCR:",
     }
 
+    tmp_path = Path(f"{os.path.dirname(os.path.realpath(__file__))}/tmp")
+    if tmp_path.exists() == False:
+        tmp_path.mkdir()
     options = {
         "path_to_tmp": "tmp",
-        "override_if_exists": True
+        "override_if_exists": args.override
     }
 
     root = Path("test-files")
+    if args.path:
+        root = args.path
+
+
     convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
     manager = Manager()
     task_queue = manager.Queue()
