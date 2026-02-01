@@ -123,36 +123,21 @@ class Pgs:
 
     def __init__(self,
                  data_reader: typing.Callable[[], bytes],
-                 temp_folder: str,
-                 forced = False
+                 temp_folder="",
                  ):
         self.data_reader = data_reader
         self.temp_folder = temp_folder
-        self.forced = forced
         self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
 
-#    @property
-#    def language(self):
-#        return self.media_path.language
-
-#    @property
-#    def srt_path(self):
-#        return self.media_path
-
     @property
-    def items(self):
+    def items(self) -> list:
         if self._items is None:
             data = self.data_reader()
             self._items = self.decode(data)
         return self._items
 
-#    def matches(self):
-#        if not self.srt_path.exists():
-#            return True
-#
-#        return True
 
-    def decode(self, data: bytes):
+    def decode(self, data: bytes) -> PgsSubtitleItem:
         display_sets = list(PgsReader.decode(data))
         self.display_sets = display_sets
 

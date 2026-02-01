@@ -1,21 +1,27 @@
-from pymkv import MKVFile, MKVTrack
-from media import Pgs
-from subprocess import check_output
-from PIL import Image
+from torch.multiprocessing import Queue, Manager, Pool, set_start_method, current_process
+from subtitle_track_manager import SubtitleTrackManager
+from model_core import OCRModelCore, LanguageModelCore
 from pysrt import SubRipFile, SubRipItem
-from pathlib import Path
+from pgs_manager import PgsManager
+from dataclasses import dataclass
 from collections import Counter
+from itertools import chain
+from rich.progress import (
+    Progress,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    TimeRemainingColumn,
+    MofNCompleteColumn,
+)
+from pymkv import MKVTrack
 from colorama import Fore
+from pathlib import Path
 from langcodes import *
+import pytesseract as tess
 import numpy as np
 import logging
-import pytesseract as tess
-import typing
-
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from transformers import AutoModelForCausalLM, AutoProcessor
-from PIL import Image
 import os
 
 
@@ -23,156 +29,104 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-#languages = [
-#    "Arabic", "Basque", "Breton", "Catalan", "Chinese_China", "Chinese_Hongkong", 
-#    "Chinese_Taiwan", "Chuvash", "Czech", "Dhivehi", "Dutch", "English", 
-#    "Esperanto", "Estonian", "French", "Frisian", "Georgian", "German", "Greek", 
-#    "Hakha_Chin", "Indonesian", "Interlingua", "Italian", "Japanese", "Kabyle", 
-#    "Kinyarwanda", "Kyrgyz", "Latvian", "Maltese", "Mongolian", "Persian", "Polish", 
-#    "Portuguese", "Romanian", "Romansh_Sursilvan", "Russian", "Sakha", "Slovenian", 
-#    "Spanish", "Swedish", "Tamil", "Tatar", "Turkish", "Ukranian", "Welsh"
-#]
+@dataclass
+class Runnable:
 
-languages = [
-    "ar", "eu", "br", "ca", "zh", "Chinese_Hongkong", 
-    "Chinese_Taiwan", "cv", "cs", "dv", "nl", "en", 
-    "eo", "et", "fr", "fy", "ka", "de", "el", 
-    "Hakha_Chin", "id", "ia", "it", "ja", "Kabyle", 
-    "rw", "ky", "lv", "mt", "mn", "fa", "pl", 
-    "pt", "ro", "Romansh_Sursilvan", "ru", "Sakha", "sl", 
-    "es", "sv", "ta", "tt", "tr", "uk", "cy"
-]
+    def __init__(
+            self,
+            prompts: dict,
+            task: str,
+            task_queue: Queue,
+            progress_queue: Queue,
+            options={},
+        ):
+        if not options:
+            self.override_if_exists = False
+        else:
+            self.override_if_exists = options["override_if_exists"]
 
+        self.fallback = False
+        try:
+            self.torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+            if self.torch_device == "cuda":
 
-def predict(text, model, tokenizer, device = torch.device('cpu')):
-    model.to(device)
-    model.eval()
-    tokenized = tokenizer(text, padding='max_length', truncation=True, max_length=128, return_tensors="pt")
-    input_ids = tokenized['input_ids']
-    attention_mask = tokenized['attention_mask']
-    with torch.no_grad():
-        input_ids = input_ids.to(device)
-        attention_mask = attention_mask.to(device)
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-    logits = outputs.logits
-    probabilities = torch.nn.functional.softmax(logits, dim=1)
-    return probabilities
+                # Check for working rocm and activate flash attention, otherwise its NVIDIA
+                if torch.version.hip != None:
+                    os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
 
+            if torch.xpu.is_available():
+                options["intel_disable_flash"] = True
+                self.torch_device = "xpu"
+                
+        except:
+            self.fallback = True
 
-def get_topk(probabilities, languages, k=3):
-    topk_prob, topk_indices = torch.topk(probabilities, k)
-    topk_prob = topk_prob.cpu().numpy()[0].tolist()
-    topk_indices = topk_indices.cpu().numpy()[0].tolist()
-    topk_labels = [languages[index] for index in topk_indices]
-    return topk_prob, topk_labels
+        self.prompts = prompts
+        self.task = task
+
+        self.ocr_model      = OCRModelCore(torch_device=self.torch_device, options=options)
+        self.language_model = LanguageModelCore(torch_device=self.torch_device)
+
+        self.task_queue = task_queue
+        self.progress_queue = progress_queue
 
 
-def main():
-    os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
+    def run(self, pgs_manager: PgsManager) -> dict[str, MKVTrack | list]:
+        
+        pgs_data = pgs_manager.get_pgs_images()
+        if not pgs_data:
+            return {}
 
-    model_path = "PaddlePaddle/PaddleOCR-VL"
-    task = "ocr"
+        logger.debug(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
+        
+        self.task_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}", len(pgs_data)))
 
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        savable = {"items": [], "combined": []}
+        for index, (image, item, track) in enumerate(pgs_data, start=1):
+            messages = [
+                {"role": "user",         
+                 "content": [
+                        {"type": "image", "image": image.convert("RGB")},
+                        {"type": "text", "text": self.prompts[self.task]},
+                    ]
+                }
+            ]
 
-    PROMPTS = {
-        "ocr": "OCR:",
-    }
+            text = self.ocr_model.analyse(messages=messages)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        trust_remote_code=True,
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2", 
-    ).to(dtype=torch.bfloat16, device=DEVICE).eval()
-    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
-
-    fallback = False
-
-    tokenizer = AutoTokenizer.from_pretrained('Mike0307/multilingual-e5-language-detection')
-    model_lang = AutoModelForSequenceClassification.from_pretrained('Mike0307/multilingual-e5-language-detection', num_labels=45)
+            if self.fallback:
+                text = tess.image_to_string(image=image)
+            else:
+                probabilities = self.language_model.predict(text=text)
+                combined = self.language_model.get_topk(probabilities=probabilities)
 
 
-    mkv = MKVFile("test-files/Arcane S01E01.mkv")
-
-    savable: typing.List[typing.Tuple[MKVTrack, SubRipFile, list]] = []
-
-    tracks = mkv.tracks
-
-    for track in tracks:
-        if track.track_type == "subtitles": 
-            items = []
-            combined = []
+            sub_item = SubRipItem(index=index, start=item.start, end=item.end, text=text)
             
-            tmp_file = f"tmp/{track.track_id}-{track.track_codec}.sup"
-            cmd = ['mkvextract', track.file_path, 'tracks', f'{track.track_id}:{tmp_file}']
-            check_output(cmd)
-            pgs = Pgs(data_reader=open(tmp_file, mode="rb").read, temp_folder="tmp")
+            savable["track"] = track
+            savable["items"].append(sub_item)
+            savable["combined"].append(combined)
 
-            test = pgs.items
-            
-            for index, item in enumerate(test, start=1):
-                
-                image = Image.fromarray(item.image.data)
-                image.save(f"tmp/{track.file_id}-{index}.png")
-
-                messages = [
-                    {"role": "user",         
-                     "content": [
-                            {"type": "image", "image": Image.open(f"tmp/{track.file_id}-{index}.png").convert("RGB")},
-                            {"type": "text", "text": PROMPTS[task]},
-                        ]
-                    }
-                ]
-                
-                inputs = processor.apply_chat_template(
-                    messages, 
-                    tokenize=True, 
-                    add_generation_prompt=True, 	
-                    return_dict=True,
-                    return_tensors="pt"
-                ).to(DEVICE)
-
-                with torch.inference_mode():
-                    out = model.generate(
-                        **inputs,
-                        max_new_tokens=1024,
-                        do_sample=False,
-                        use_cache=True
-                    )
-
-                text = processor.batch_decode(out, skip_special_tokens=True)[0]
-                text = str(text).partition("Assistant: ")[2].replace("\"", "")
-                
-                probabilities = predict(text, model_lang, tokenizer, torch.device("cuda"))
-                topk_prob, topk_labels = get_topk(probabilities, languages)
-
-                combined.append([(a, b) for a, b in zip(topk_labels, topk_prob)])
+            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
+        
+        logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
+        return savable
 
 
-                logger.info(Fore.GREEN + f"text: {text} and detected language: {(topk_labels, topk_prob)}" + Fore.RESET)
+    def save_file(self, savable: dict[str, MKVTrack | list]):
+        combined = savable["combined"]
+        items    = savable["items"]
+        srt      = SubRipFile(items=items)
+        track    = savable["track"]
 
-                if fallback:
-                    text = tess.image_to_string(image=Image.fromarray(item.image.data))
-                
-                items.append(SubRipItem(index=index, start=item.start, end=item.end, text=text))
-                
-
-            savable.append((track, SubRipFile(items=items), combined))
-    
-
-    unique = 1
-    for track, srt, combined in savable:
         path = Path(track.file_path).name.replace(".mkv", "")
-
-
         counter = Counter()
         average = {}
         weights = {}
+
         for both in combined:
             for label, prob in both:
                 counter.update([label])
-
                 if label not in average:
                     average[label] = [prob]
                 else:
@@ -182,44 +136,106 @@ def main():
 
         for label, count in counter.items():
             weights[label] = count / counter.total()
-        
         for label, prob in average.items():
             average[label] = np.average(prob) * weights[label]
-        
 
         logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
 
-        logger.info(average)
-        
-        max_key = None
-        max_value = float('-inf')
+        final_lang = max(average, key=average.get)
 
-        for language, probability in average.items():
-            if probability > max_value:
-                max_value = probability
-                max_key = language
+        logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
-        final_lang = max_key
-
-        print(final_lang)
+        forced = True if track.forced_track or len(items) <= 150 else False
 
         path = path + (".sdh" if track.flag_hearing_impaired else "")
-        path = path + (".forced" if track.forced_track else "")
+        path = path + (".forced" if forced else "")
         path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
-        
-        potential_path = f"results/{path}.srt"
-        
-        
+        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
+
         logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
-        
-        if Path(potential_path).exists():
-            potential_path = potential_path.replace(path, f"{path}-{unique}")
-            unique += 1
-        
+
+        logger.debug(f"{self.override_if_exists == True} and {Path(potential_path)} exists: {Path(potential_path).exists()}")
+        if self.override_if_exists == True and Path(potential_path).exists():
+            Path(potential_path).unlink()
+        else:
+            unique = 0
+            while Path(potential_path).exists():
+                unique += 1
+            potential_path = potential_path.replace(path, f"{path}-{unique}" if unique != 0 else f"{path}")
+            
         srt.save(path=potential_path)
+
+
+def main():
+    task = "ocr"
+    prompts = {
+        "ocr": "OCR:",
+    }
+
+    options = {
+        "path_to_tmp": "tmp",
+        "override_if_exists": True
+    }
+
+    root = Path("test-files")
+    convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
+    manager = Manager()
+    task_queue = manager.Queue()
+    progress_queue = manager.Queue()
+    pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
+
+
+    try:
+         set_start_method("forkserver", force=True)
+    except RuntimeError:
+        pass
+    runnable = Runnable(prompts=prompts, task=task, options=options, task_queue=task_queue, progress_queue=progress_queue)
+
+
+    progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+        )
     
-    
-    
+
+    with progress:
+        with Pool(processes=6) as pool:
+            tasks = {}
+            end = False
+            for results in pool.imap_unordered(runnable.run, pgs_managers):
+                while end == False:
+
+                    if task_queue.empty() == False:
+                        description, total = task_queue.get_nowait()
+                        task_id = progress.add_task(description=description, total=total)
+
+                        task = [task for task in progress.tasks if task.id == task_id][0]
+                        tasks[description] = (task_id, task)
+
+
+                    if progress_queue.empty() == False:
+                        description = progress_queue.get_nowait()
+                        if description in tasks:
+                            task_id = tasks[description][0]
+                            progress.update(task_id=task_id, advance=1)
+
+                            task = tasks[description][1]
+                            if task.finished:
+                                progress.update(task_id=task.id, visible=False)
+                                del tasks[description]
+
+
+                    if progress.finished:
+                        end = True
+                
+
+                if not results:
+                    continue
+                runnable.save_file(savable=results)
+        
     
 if __name__=="__main__":
     main()
