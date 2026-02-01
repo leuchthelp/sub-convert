@@ -37,7 +37,7 @@ class LanguageModelCore:
     def predict(self, text: str) -> torch.Tensor:
         self.model.to(self.torch_device)
         self.model.eval().share_memory()
-        tokenized = self.tokenizer(text, padding='max_length', truncation=True, max_length=128, return_tensors="pt")
+        tokenized = self.tokenizer(text.lower(), padding='max_length', truncation=True, max_length=128, return_tensors="pt")
         input_ids = tokenized['input_ids']
         attention_mask = tokenized['attention_mask']
 
