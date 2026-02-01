@@ -25,9 +25,9 @@ class LanguageModelCore:
         self,
         model_name="Mike0307/multilingual-e5-language-detection",
         torch_device="cpu",
-        languages=languages
-
-    ):
+        languages=languages,
+        options={}
+    ):  
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path=model_name, num_labels=45)
         self.torch_device = torch.device(torch_device)
@@ -73,17 +73,22 @@ class OCRModelCore:
 
     def __init__(
         self,
-        model_name="PaddlePaddle/PaddleOCR-VL",
+        model_name="PaddlePaddle/PaddleOCR-VL-1.5",
         torch_device="cpu",
-
+        options={},
     ):
         self.torch_device = torch_device
+
+        attn_implementation="flash_attention_2"
+        if "intel_disable_flash" in options or self.torch_device == "cpu":
+            attn_implementation = "sdpa"
+
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             trust_remote_code=True,
             dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2", 
-        ).to(dtype=torch.bfloat16, device=self.torch_device).eval().share_memory()
+            attn_implementation=attn_implementation, 
+        ).to(device=self.torch_device).eval().share_memory()
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
 
     def analyse(self, messages: list) ->  str:

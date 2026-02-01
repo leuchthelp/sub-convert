@@ -1,15 +1,11 @@
-from dataclasses import dataclass
-from pymkv import MKVTrack
-from pysrt import SubRipFile, SubRipItem
-from pathlib import Path
-from collections import Counter
-from colorama import Fore
-from langcodes import *
-from model_core import OCRModelCore, LanguageModelCore
+from torch.multiprocessing import Queue, Manager, Pool, set_start_method, current_process
 from subtitle_track_manager import SubtitleTrackManager
-from torch.multiprocessing import Pool, set_start_method, current_process, Queue, Manager
-from itertools import chain
+from model_core import OCRModelCore, LanguageModelCore
+from pysrt import SubRipFile, SubRipItem
 from pgs_manager import PgsManager
+from dataclasses import dataclass
+from collections import Counter
+from itertools import chain
 from rich.progress import (
     Progress,
     TextColumn,
@@ -18,20 +14,19 @@ from rich.progress import (
     TimeRemainingColumn,
     MofNCompleteColumn,
 )
+from pymkv import MKVTrack
+from colorama import Fore
+from pathlib import Path
+from langcodes import *
+import pytesseract as tess
 import numpy as np
 import logging
-import pytesseract as tess
 import torch
 import os
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-class SubtitleProgressBar(Progress):
-
-    def __init__(self):
-        pass
 
 
 @dataclass
@@ -53,13 +48,25 @@ class Runnable:
         self.fallback = False
         try:
             self.torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            #self.torch_device = "cpu"
+            if self.torch_device == "cuda":
+
+                # Check for working rocm and activate flash attention, otherwise its NVIDIA
+                if torch.version.hip != None:
+                    os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
+
+            if torch.xpu.is_available():
+                options["intel_disable_flash"] = True
+                self.torch_device = "xpu"
+                
         except:
             self.fallback = True
 
         self.prompts = prompts
         self.task = task
 
-        self.ocr_model      = OCRModelCore(torch_device=self.torch_device)
+        self.ocr_model      = OCRModelCore(torch_device=self.torch_device, options=options)
         self.language_model = LanguageModelCore(torch_device=self.torch_device)
 
         self.task_queue = task_queue
@@ -162,8 +169,6 @@ class Runnable:
 
 
 def main():
-    os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
-
     task = "ocr"
     prompts = {
         "ocr": "OCR:",
@@ -181,12 +186,13 @@ def main():
     progress_queue = manager.Queue()
     pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
 
+
     try:
          set_start_method("forkserver", force=True)
     except RuntimeError:
         pass
-
     runnable = Runnable(prompts=prompts, task=task, options=options, task_queue=task_queue, progress_queue=progress_queue)
+
 
     progress = Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -232,7 +238,6 @@ def main():
                     continue
                 runnable.save_file(savable=results)
         
- 
     
 if __name__=="__main__":
     main()
