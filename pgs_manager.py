@@ -41,12 +41,7 @@ class PgsManager:
 
         self.pgs_items = pgs.items
 
-        return [(Image.fromarray(item.image.data), item, self.mkv_track) for item in self.pgs_items]
-    
+        shutil.rmtree(path=self.tmp_path)
 
-    def __del__(self):
-        try:
-            shutil.rmtree(path=self.tmp_path)
-        except FileNotFoundError:
-            pass
+        return [(Image.fromarray(item.image.data), item, self.mkv_track) for item in self.pgs_items]
 
