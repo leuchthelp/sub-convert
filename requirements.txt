@@ -2,3 +2,10 @@ pymkv2
 pytesseract
 pysrt
 pillow
+rich
+langcodes
+colorama
+einops
+transformers==4.57.6
+protobuf
+sentencepiece
