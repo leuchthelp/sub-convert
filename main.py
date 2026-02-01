@@ -191,7 +191,7 @@ def main():
 
     root = Path("test-files")
     if args.path:
-        root = args.path
+        root = Path(args.path)
 
 
     convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
@@ -218,7 +218,7 @@ def main():
     
 
     with progress:
-        with Pool(processes=6) as pool:
+        with Pool(processes=2) as pool:
             tasks = {}
             end = False
             for results in pool.imap_unordered(runnable.run, pgs_managers):
