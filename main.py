@@ -252,7 +252,7 @@ def main():
                             # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
                             # Since file is still being saved and this only for fancy progressbar, should be ok
                             if task.finished or task.remaining <= 1.0:
-                                progress.update(task_id=task.id, visible=True)
+                                progress.update(task_id=task.id, visible=False)
 
 
                     if progress.finished:
