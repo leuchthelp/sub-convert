@@ -86,10 +86,11 @@ class Runnable:
         savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
             
-            test_width, test_height = image.size
+            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
 
+            test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
-                return False
+                continue
 
             messages = [
                 {"role": "user",         
@@ -101,6 +102,9 @@ class Runnable:
             ]
 
             text = self.ocr_model.analyse(messages=messages)
+
+            if not text:
+                continue
 
             if self.fallback:
                 text = tess.image_to_string(image=image)
@@ -114,8 +118,6 @@ class Runnable:
             savable["track"] = track
             savable["items"].append(sub_item)
             savable["combined"].append(combined)
-
-            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
         
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         
@@ -127,6 +129,10 @@ class Runnable:
         combined = savable["combined"]
         items    = savable["items"]
         srt      = SubRipFile(items=items)
+
+        if "track" not in savable:
+            return
+        
         track    = savable["track"]
 
         path = Path(track.file_path).name.replace(".mkv", "")
@@ -228,7 +234,7 @@ def main():
     
 
     with progress:
-        with Pool(processes=3) as pool:
+        with Pool(processes=8) as pool:
             tasks = {}
             end = False
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
