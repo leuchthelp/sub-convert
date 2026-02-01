@@ -23,10 +23,11 @@ import numpy as np
 import argparse
 import logging
 import torch
+import time
 import os
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -84,6 +85,12 @@ class Runnable:
 
         savable = {"items": [], "combined": []}
         for index, (image, item, track) in enumerate(pgs_data, start=1):
+            
+            test_width, test_height = image.size
+
+            if test_width == 0 or test_height == 0:
+                return False
+
             messages = [
                 {"role": "user",         
                  "content": [
@@ -221,7 +228,7 @@ def main():
     
 
     with progress:
-        with Pool(processes=2) as pool:
+        with Pool(processes=3) as pool:
             tasks = {}
             end = False
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
@@ -245,11 +252,10 @@ def main():
                             # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
                             # Since file is still being saved and this only for fancy progressbar, should be ok
                             if task.finished or task.remaining <= 1.0:
-                                progress.update(task_id=task.id, visible=False)
-                                del tasks[description]
+                                progress.update(task_id=task.id, visible=True)
 
 
-                    if progress.finished or not tasks:
+                    if progress.finished:
                         end = True
                       
     
