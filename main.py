@@ -72,11 +72,11 @@ class Runnable:
         self.progress_queue = progress_queue
 
 
-    def run(self, pgs_manager: PgsManager) -> dict[str, MKVTrack | list]:
+    def run(self, pgs_manager: PgsManager) -> bool:
         
         pgs_data = pgs_manager.get_pgs_images()
         if not pgs_data:
-            return {}
+            return False
 
         logger.debug(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
         
@@ -111,7 +111,9 @@ class Runnable:
             self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
         
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
-        return savable
+        
+        self.save_file(savable=savable)
+        return True
 
 
     def save_file(self, savable: dict[str, MKVTrack | list]):
@@ -162,7 +164,8 @@ class Runnable:
             unique = 0
             while Path(potential_path).exists():
                 unique += 1
-            potential_path = potential_path.replace(path, f"{path}-{unique}" if unique != 0 else f"{path}")
+                potential_path = potential_path.replace(f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}")
+                potential_path = potential_path.replace(f"-{unique-1}", "",)
             
         srt.save(path=potential_path)
 
@@ -218,15 +221,14 @@ def main():
     
 
     with progress:
-        with Pool(processes=2) as pool:
+        with Pool(processes=4) as pool:
             tasks = {}
             end = False
-            for results in pool.imap_unordered(runnable.run, pgs_managers):
+            for _ in pool.imap_unordered(runnable.run, pgs_managers):
                 while end == False:
-
                     if task_queue.empty() == False:
                         description, total = task_queue.get_nowait()
-                        task_id = progress.add_task(description=description, total=total)
+                        task_id = progress.add_task(description=description, total=total, visible=True)
 
                         task = [task for task in progress.tasks if task.id == task_id][0]
                         tasks[description] = (task_id, task)
@@ -239,19 +241,17 @@ def main():
                             progress.update(task_id=task_id, advance=1)
 
                             task = tasks[description][1]
-                            if task.finished:
+
+                            # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
+                            # Since file is still being saved and this only for fancy progressbar, should be ok
+                            if task.finished or task.remaining <= 1.0:
                                 progress.update(task_id=task.id, visible=False)
                                 del tasks[description]
 
 
-                    if progress.finished:
+                    if progress.finished or not tasks:
                         end = True
-                
-
-                if not results:
-                    continue
-                runnable.save_file(savable=results)
-        
+                      
     
 if __name__=="__main__":
     main()

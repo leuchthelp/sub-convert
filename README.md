@@ -43,7 +43,7 @@ python main.py -p test-files
 When files are being saved, existing files can also be override by specifying:
 
 ```bash
-python main.py -o
+python main.py -o True
 ```
 
 or by changing:
