@@ -1,0 +1,4 @@
+pymkv2
+pytesseract
+pysrt
+pillow
