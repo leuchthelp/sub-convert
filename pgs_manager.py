@@ -45,5 +45,8 @@ class PgsManager:
     
 
     def __del__(self):
-        shutil.rmtree(path=self.tmp_path)
+        try:
+            shutil.rmtree(path=self.tmp_path)
+        except FileNotFoundError:
+            pass
 
