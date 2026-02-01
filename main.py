@@ -26,7 +26,7 @@ import torch
 import os
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -221,7 +221,7 @@ def main():
     
 
     with progress:
-        with Pool(processes=4) as pool:
+        with Pool(processes=2) as pool:
             tasks = {}
             end = False
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
