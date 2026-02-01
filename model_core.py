@@ -73,7 +73,7 @@ class OCRModelCore:
 
     def __init__(
         self,
-        model_name="PaddlePaddle/PaddleOCR-VL-1.5",
+        model_name="PaddlePaddle/PaddleOCR-VL",
         torch_device="cpu",
         options={},
     ):

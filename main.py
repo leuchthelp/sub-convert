@@ -25,7 +25,7 @@ import torch
 import os
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -48,8 +48,6 @@ class Runnable:
         self.fallback = False
         try:
             self.torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-
-            #self.torch_device = "cpu"
             if self.torch_device == "cuda":
 
                 # Check for working rocm and activate flash attention, otherwise its NVIDIA
