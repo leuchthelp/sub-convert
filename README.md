@@ -1,8 +1,8 @@
-# sup-convert
+# sub-convert
 
 **WARNING** current only tested for AMD GPUs and CPU, needs testing for other vendors, see the [Installation guide](#installation-guide) 
 
-sup-convert is a simple project inspired by [pgsrip](https://github.com/ratoaq2/pgsrip) by [ratoaq2](https://github.com/ratoaq2). It is meant to convert PGS (image-based) subtitles to SRT (text-based) subtitles using a shared OCR model which `N` processes can request `image-to-text` conversion from. 
+sub-convert is a simple project inspired by [pgsrip](https://github.com/ratoaq2/pgsrip) by [ratoaq2](https://github.com/ratoaq2). It is meant to convert PGS (image-based) subtitles to SRT (text-based) subtitles using a shared OCR model which `N` processes can request `image-to-text` conversion from. 
 
 Please refer to the [current roadmap](#current-roadmap) for information on future development.
 
@@ -91,7 +91,7 @@ The current plan is to design a tool than can handle all kinds of `CPU`, `GPU`, 
 
 Since Docker containers will most likely be the intended way of interacting with this project, I thought up the concept of creating a custom Jellyfin plugin that can interface with it. This is an early stage idea, but I image a server running inside the container waiting for a request from jellyfin which points to a directory path were new `.mkv` files have been added. 
 
-It will then launch `sup-convert` and tell it to look for files in the requested path and convert their contents.
+It will then launch `sub-convert` and tell it to look for files in the requested path and convert their contents.
 
 ### More formats to support
 
