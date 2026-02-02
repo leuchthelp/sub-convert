@@ -23,7 +23,6 @@ import numpy as np
 import argparse
 import logging
 import torch
-import time
 import os
 
 
@@ -102,7 +101,6 @@ class Runnable:
             ]
 
             text = self.ocr_model.analyse(messages=messages)
-
             if not text:
                 continue
 
@@ -210,7 +208,11 @@ def main():
         root = Path(args.path)
 
 
-    convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
+    if root.is_file():
+        convertibles = [root.absolute()]
+    else:
+        convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
+
     manager = Manager()
     task_queue = manager.Queue()
     progress_queue = manager.Queue()
