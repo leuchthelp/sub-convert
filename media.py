@@ -100,7 +100,7 @@ class PgsSubtitleItem:
         elif not self.end or self.end <= self.start:
             if next_item and next_item.start and self.start + 10000 >= next_item.start:
                 self.end = max(self.start + 1, next_item.start - 1)
-                logger.info('Fix applied for %r: Subtitle end timestamp was fixed', self)
+                logger.debug('Fix applied for %r: Subtitle end timestamp was fixed', self)
             else:
                 logger.warning('Corrupted %r: Subtitle with corrupted end timestamp', self)
                 valid = False
