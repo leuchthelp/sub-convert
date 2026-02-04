@@ -21,6 +21,6 @@ class SubtitleTrackManager:
 
 
     def get_pgs_managers(self) -> list:
-        return [PgsManager(mkv_track=track, mkv_file=self.mkv_file, options=self.options) for track in self.tracks]
+        return (PgsManager(mkv_track=track, mkv_file=self.mkv_file, options=self.options) for track in self.tracks)
 
 

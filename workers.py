@@ -6,6 +6,7 @@ from pgs_manager import PgsManager
 from dataclasses import dataclass
 from langcodes import Language
 from pymkv import MKVTrack
+from copy import deepcopy
 from colorama import Fore
 from pathlib import Path
 import pytesseract as tess
@@ -22,7 +23,7 @@ class OCRGPUWorker:
 
     def __init__(
             self,
-            messages: list,
+            message_template: dict,
             core: OCRModelCore,
             queues: dict[str, Queue],
             options={},
@@ -34,25 +35,50 @@ class OCRGPUWorker:
 
         self.core = core(options=self.options)
         self.core.model.to(self.torch_device).eval()
-        self.messages = messages
+        self.message_template = message_template
 
 
-    def run(self):
-        end = False
+    def run(self, batch_size=4):
+        end      = False
+        last_run_on_track = False
+        end_signal_received = False
+        batch    = []
+        memory   = {}
         while end == False:
-            if not self.process_queue.empty():
-                image, return_queue = self.process_queue.get_nowait()
+            try:
+                if last_run_on_track == False: 
+                    image, return_queue = self.process_queue.get(timeout=10)
 
-                if return_queue == -1:
-                    self.pass_queue.put((None, -1))
+                    if return_queue == -1:
+                        end_signal_received = True
+                    else:
+                        message_template = deepcopy(self.message_template)
+                        message_template[0]["content"][0]["image"] = image
+                        batch.append(message_template)
+                        memory[str(len(batch)-1)] = return_queue
+                
+
+                if len(batch) == batch_size or end_signal_received == True: 
+                    texts = self.core.analyse(batch=batch)
+                    logger.info(f"{len(batch)}, {memory}, {texts}")
+                    [self.pass_queue.put_nowait((texts[int(index)], return_queue)) for index, return_queue in memory.items()]
+                    batch.clear()
+                    memory.clear()
+
+                if end_signal_received == True:
+                    self.pass_queue.put_nowait((None, -1))
                     end = True
-                    continue
-                else:
-                    self.messages[0]["content"][0]["image"] = image
-                    text = self.core.analyse(messages=self.messages)
-                    self.pass_queue.put_nowait((text, return_queue))
-            else:
-                continue
+
+            except:
+                batch_size = len(batch)
+                last_run_on_track = True
+        
+        logger.debug(Fore.MAGENTA + "OCRGPUWorker ended" + Fore.RESET)
+
+    
+    def __del__(self):
+        del self.core
+
     
 
 @dataclass
@@ -78,6 +104,7 @@ class LangaugeGPUWorker:
         while end == False:
             if not self.pass_queue.empty():
                 original_text, return_queue = self.pass_queue.get_nowait()
+                logger.debug(f"{original_text}, {return_queue}")
 
                 if return_queue == -1:
                     end = True
@@ -88,6 +115,12 @@ class LangaugeGPUWorker:
                     self.queues[return_queue].put_nowait((original_text, combined))
             else:
                 continue
+
+        logger.debug(Fore.MAGENTA + "LanguageGPUWorker ended" + Fore.RESET)
+
+
+    def __del__(self):
+        del self.core
         
         
 @dataclass
