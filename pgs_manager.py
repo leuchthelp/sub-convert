@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from colorama import Fore
 from pymkv import  MKVTrack, MKVFile
+from media import PgsSubtitleItem
 from pathlib import Path
 from media import Pgs
 from PIL import Image
@@ -32,7 +33,7 @@ class PgsManager:
         self.tmp_path.mkdir(parents=True)
 
 
-    def get_pgs_images(self) -> list:
+    def get_pgs_images(self) -> list[Image, PgsSubtitleItem, MKVTrack]:
         tmp_file = f"{self.tmp_path}/{self.mkv_track.file_path}-{self.mkv_track.track_id}-{self.mkv_track.track_codec}.sup"
         cmd = ["mkvextract", self.mkv_track.file_path, "tracks", f"{self.mkv_track.track_id}:{tmp_file}"]
 

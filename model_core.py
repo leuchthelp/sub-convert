@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from colorama import Fore
 import logging
+import typing
 
-import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import AutoModelForCausalLM, AutoProcessor
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -18,25 +19,37 @@ languages = [
     "es", "sv", "ta", "tt", "tr", "uk", "cy"
 ]
 
+
 @dataclass
-class LanguageModelCore:
+class ModelCore:
+
+    def __init__(self):
+        pass
+
+
+@dataclass
+class LanguageModelCore(ModelCore):
+
+
+    model: typing.Any
+
 
     def __init__(
         self,
         model_name="Mike0307/multilingual-e5-language-detection",
-        torch_device="cpu",
         languages=languages,
         options={}
     ):  
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path=model_name, num_labels=45)
-        self.torch_device = torch.device(torch_device)
+        self.torch_device = torch.device(options["torch_device"])
         self.languages = languages
-        
 
-    def predict(self, text: str) -> torch.Tensor:
         self.model.to(self.torch_device)
         self.model.eval().share_memory()
+        
+
+    def __predict(self, text: str) -> torch.Tensor:
         tokenized = self.tokenizer(text.lower(), padding='max_length', truncation=True, max_length=128, return_tensors="pt")
         input_ids = tokenized['input_ids']
         attention_mask = tokenized['attention_mask']
@@ -55,7 +68,9 @@ class LanguageModelCore:
         return probabilities
     
 
-    def get_topk(self, probabilities, k=3) -> list:
+    def get_topk(self, text: str, k=3) -> list:
+        
+        probabilities = self.__predict(text=text)
         topk_prob, topk_indices = torch.topk(probabilities, k)
 
         topk_prob = topk_prob.cpu().numpy()[0].tolist()
@@ -69,15 +84,16 @@ class LanguageModelCore:
     
 
 @dataclass
-class OCRModelCore:
+class OCRModelCore(ModelCore):
+
+    model: typing.Any
 
     def __init__(
         self,
         model_name="PaddlePaddle/PaddleOCR-VL",
-        torch_device="cpu",
         options={},
     ):
-        self.torch_device = torch_device
+        self.torch_device = options["torch_device"]
 
         attn_implementation="flash_attention_2"
         if "intel_disable_flash" in options or self.torch_device == "cpu":
@@ -90,6 +106,7 @@ class OCRModelCore:
             attn_implementation=attn_implementation, 
         ).to(device=self.torch_device).eval().share_memory()
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
+
 
     def analyse(self, messages: list) ->  str:
 
