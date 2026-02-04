@@ -11,6 +11,7 @@ from rich.progress import (
     TimeRemainingColumn,
     MofNCompleteColumn,
 )
+from colorama import Fore
 from pathlib import Path
 import argparse
 import logging
@@ -76,7 +77,7 @@ def main():
     prompts = {
         "ocr": "OCR:",
     }
-    messages = [
+    message_template = [
                 {"role": "user",         
                  "content": [
                         {"type": "image", "image": None},
@@ -103,12 +104,12 @@ def main():
     manager = Manager()
     queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
 
-    cpu_workers = 4
+    cpu_workers = 2
     for index in range(4, cpu_workers+4+1):
         queues[f"{index}"] = manager.Queue()
 
     gpu_processes = [
-        Process(target=OCRGPUWorker(messages=messages, core=OCRModelCore, queues=queues, options=options).run),
+        Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run),
         Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run),
     ]
     [process.start() for process in gpu_processes]
@@ -118,11 +119,11 @@ def main():
     with progress:
         with Pool(processes=cpu_workers) as pool:
             tasks = {}
-            end = False
             task_queue      = queues["task_queue"]
             progress_queue  = queues["progress_queue"]
 
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
+                end = False
                 while end == False:
                     if task_queue.empty() == False:
                         description, total = task_queue.get_nowait()
@@ -142,7 +143,7 @@ def main():
 
                             # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
                             # Since file is still being saved and this only for fancy progressbar, should be ok
-                            if task.finished or task.remaining <= 1.0:
+                            if task.finished:
                                 progress.update(task_id=task.id, visible=False)
 
                     
@@ -151,7 +152,7 @@ def main():
                     if progress.finished and not not tasks:
                         end = True
 
-                queues["ocr_queue"].put((None, -1))
+            queues["ocr_queue"].put((None, -1))
 
         [process.join() for process in gpu_processes]
         [process.close() for process in gpu_processes]

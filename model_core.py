@@ -46,7 +46,7 @@ class LanguageModelCore(ModelCore):
         self.languages = languages
 
         self.model.to(self.torch_device)
-        self.model.eval().share_memory()
+        self.model.eval()
         
 
     def __predict(self, text: str) -> torch.Tensor:
@@ -65,6 +65,8 @@ class LanguageModelCore(ModelCore):
 
         logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
 
+        del input_ids, attention_mask
+
         return probabilities
     
 
@@ -80,7 +82,16 @@ class LanguageModelCore(ModelCore):
 
         logger.debug(Fore.MAGENTA + f"top probilities: {topk_prob}, top labels: {topk_labels}" + Fore.RESET)
 
-        return [(a, b) for a, b in zip(topk_labels, topk_prob)]
+        tmp = [(a, b) for a, b in zip(topk_labels, topk_prob)]
+
+        del probabilities, topk_labels, topk_prob
+
+        return tmp
+    
+
+    def __del__(self):
+        del self.model
+        del self.tokenizer
     
 
 @dataclass
@@ -104,18 +115,20 @@ class OCRModelCore(ModelCore):
             trust_remote_code=True,
             dtype=torch.bfloat16,
             attn_implementation=attn_implementation, 
-        ).to(device=self.torch_device).eval().share_memory()
+        ).to(device=self.torch_device).eval()
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
 
 
-    def analyse(self, messages: list) ->  str:
+    def analyse(self, batch: list) ->  str:
 
         inputs = self.processor.apply_chat_template(
-            messages, 
-            tokenize=True, 
-            add_generation_prompt=True, 	
-            return_dict=True,
-            return_tensors="pt"
+            batch, 
+            add_generation_prompt=True,
+	        tokenize=True,
+	        return_dict=True,
+	        return_tensors="pt",
+            padding=True,
+            padding_side='left',
         ).to(self.torch_device)
 
         with torch.inference_mode():
@@ -126,9 +139,15 @@ class OCRModelCore(ModelCore):
                 use_cache=True
             )
 
-        text = self.processor.batch_decode(out, skip_special_tokens=True)[0]
-        text = str(text).partition("Assistant: ")[2]
+        generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, out)]
+        texts = self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-        logger.debug(Fore.CYAN+ f"clean text: {text}" + Fore.RESET)
+        logger.debug(Fore.CYAN+ f"clean text: {texts}" + Fore.RESET)
+        del inputs
 
-        return text
+        return texts
+    
+    
+    def __del__(self):
+        del self.model
+        del self.processor  
