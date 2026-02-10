@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from colorama import Fore
 from pymkv import MKVFile
 from pgs_manager import PgsManager
+from pathlib import Path
+import typing
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,7 +14,7 @@ class SubtitleTrackManager:
 
     def __init__(
             self,
-            file_path: str,
+            file_path: Path,
             options: dict,
     ):
         self.mkv_file = MKVFile(file_path=file_path)
@@ -20,7 +22,7 @@ class SubtitleTrackManager:
         self.options = options
 
 
-    def get_pgs_managers(self) -> list:
+    def get_pgs_managers(self) -> typing.Generator:
         return (PgsManager(mkv_track=track, mkv_file=self.mkv_file, options=self.options) for track in self.tracks)
 
 

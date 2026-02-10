@@ -1,4 +1,4 @@
-from torch.multiprocessing import current_process, Queue, Manager
+from torch.multiprocessing import current_process, Queue
 from model_core import OCRModelCore, LanguageModelCore
 from pysrt import SubRipFile, SubRipItem
 from collections import Counter
@@ -14,7 +14,6 @@ import numpy as np
 import logging
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -33,12 +32,11 @@ class OCRGPUWorker:
         self.options        = options
         self.torch_device   = self.options["torch_device"]
 
-        self.core = core(options=self.options)
-        self.core.model.to(self.torch_device).eval()
+        self.core = core(options=self.options) # type: ignore
         self.message_template = message_template
 
 
-    def run(self, batch_size=4):
+    def run(self, batch_size=16):
         end      = False
         last_run_on_track = False
         end_signal_received = False
@@ -59,15 +57,17 @@ class OCRGPUWorker:
                 
 
                 if len(batch) == batch_size or end_signal_received == True: 
-                    texts = self.core.analyse(batch=batch)
-                    logger.info(f"{len(batch)}, {memory}, {texts}")
-                    [self.pass_queue.put_nowait((texts[int(index)], return_queue)) for index, return_queue in memory.items()]
-                    batch.clear()
-                    memory.clear()
 
-                if end_signal_received == True:
-                    self.pass_queue.put_nowait((None, -1))
-                    end = True
+                    if batch and memory:
+                        texts = self.core.analyse(batch=batch)
+                        logger.debug(f"{len(batch)}, {memory}, {texts}")
+                        [self.pass_queue.put_nowait((texts[int(index)], return_queue)) for index, return_queue in memory.items()]
+                        batch.clear()
+                        memory.clear()
+
+                    if end_signal_received == True:
+                        self.pass_queue.put_nowait((None, -1))
+                        end = True
 
             except:
                 batch_size = len(batch)
@@ -80,7 +80,6 @@ class OCRGPUWorker:
         del self.core
 
     
-
 @dataclass
 class LangaugeGPUWorker:
 
@@ -95,15 +94,14 @@ class LangaugeGPUWorker:
         self.options        = options
         self.torch_device   = self.options["torch_device"]
 
-        self.core = core(options=self.options)
-        self.core.model.to(self.torch_device).eval()
+        self.core = core(options=self.options) # type: ignore
 
 
     def run(self):
         end = False
         while end == False:
             if not self.pass_queue.empty():
-                original_text, return_queue = self.pass_queue.get_nowait()
+                original_text, return_queue = self.pass_queue.get()
                 logger.debug(f"{original_text}, {return_queue}")
 
                 if return_queue == -1:
@@ -153,7 +151,7 @@ class CPUWorker:
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
         finished = []
-        for image, item, track in pgs_data:
+        for image, item, track in pgs_data: # type: ignore
             
             test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
@@ -192,7 +190,7 @@ class CPUWorker:
         
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         
-        self.save_file(savable=savable)
+        self.save_file(savable=savable) # type: ignore
         return True
 
 
@@ -209,12 +207,12 @@ class CPUWorker:
         
         track    = savable["track"]
 
-        path = Path(track.file_path).name.replace(".mkv", "")
+        path = Path(track.file_path).name.replace(".mkv", "") # type: ignore
         counter = Counter()
         average = {}
         weights = {}
 
-        for both in combined:
+        for both in combined: # type: ignore
             for label, prob in both:
                 counter.update([label])
                 if label not in average:
@@ -231,18 +229,18 @@ class CPUWorker:
 
         logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
 
-        final_lang = track.language_ietf
+        final_lang = track.language_ietf # type: ignore
         if self.fallback == False:
-            final_lang = max(average, key=average.get)
+            final_lang = max(average, key=average.get) # type: ignore
 
         logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
-        forced = True if track.forced_track or len(items) <= 150 else False
+        forced = True if track.forced_track or len(items) <= 150 else False # type: ignore
 
-        path = path + (".sdh" if track.flag_hearing_impaired else "")
+        path = path + (".sdh" if track.flag_hearing_impaired else "") # type: ignore
         path = path + (".forced" if forced else "")
-        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
-        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
+        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "") # type: ignore
+        potential_path = f"{Path(track.file_path).parent}/{path}.srt" # type: ignore
 
         logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
 
