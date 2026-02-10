@@ -28,73 +28,6 @@ class ModelCore:
 
 
 @dataclass
-class LanguageModelCore(ModelCore):
-
-
-    model: typing.Any
-
-
-    def __init__(
-        self,
-        model_name="Mike0307/multilingual-e5-language-detection",
-        languages=languages,
-        options={}
-    ):  
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path=model_name, num_labels=45)
-        self.torch_device = torch.device(options["torch_device"])
-        self.languages = languages
-
-        self.model.to(self.torch_device)
-        self.model.eval()
-        
-
-    def __predict(self, text: str) -> torch.Tensor:
-        tokenized = self.tokenizer(text.lower(), padding='max_length', truncation=True, max_length=128, return_tensors="pt")
-        input_ids = tokenized['input_ids']
-        attention_mask = tokenized['attention_mask']
-
-
-        with torch.no_grad():
-            input_ids = input_ids.to(self.torch_device)
-            attention_mask = attention_mask.to(self.torch_device)
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-
-        logits = outputs.logits
-        probabilities = torch.nn.functional.softmax(logits, dim=1)
-
-        logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
-
-        del input_ids, attention_mask
-
-        return probabilities
-    
-
-    def get_topk(self, text: str, k=3) -> list:
-        
-        probabilities = self.__predict(text=text)
-        topk_prob, topk_indices = torch.topk(probabilities, k)
-
-        topk_prob = topk_prob.cpu().numpy()[0].tolist()
-        topk_indices = topk_indices.cpu().numpy()[0].tolist()
-
-        topk_labels = [self.languages[index] for index in topk_indices]
-
-        logger.debug(Fore.MAGENTA + f"top probilities: {topk_prob}, top labels: {topk_labels}" + Fore.RESET)
-
-        tmp = [(a, b) for a, b in zip(topk_labels, topk_prob)]
-
-        del probabilities, topk_labels, topk_prob
-
-        return tmp
-    
-
-    def __del__(self):
-        del self.model
-        del self.tokenizer
-    
-
-@dataclass
 class OCRModelCore(ModelCore):
 
     model: typing.Any
@@ -151,3 +84,71 @@ class OCRModelCore(ModelCore):
     def __del__(self):
         del self.model
         del self.processor  
+
+
+@dataclass
+class LanguageModelCore(ModelCore):
+
+
+    model: typing.Any
+
+
+    def __init__(
+        self,
+        model_name="Mike0307/multilingual-e5-language-detection",
+        languages=languages,
+        options={}
+    ):  
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path=model_name, num_labels=45)
+        self.torch_device = torch.device(options["torch_device"])
+        self.languages = languages
+
+        self.model.to(self.torch_device)
+        self.model.eval()
+        
+
+    def __predict(self, text: str) -> torch.Tensor:
+        tokenized = self.tokenizer(text.lower(), padding='max_length', truncation=True, max_length=128, return_tensors="pt")
+        input_ids = tokenized['input_ids']
+        attention_mask = tokenized['attention_mask']
+
+
+        with torch.no_grad():
+            input_ids = input_ids.to(self.torch_device)
+            attention_mask = attention_mask.to(self.torch_device)
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+        logits = outputs.logits
+        probabilities = torch.nn.functional.softmax(logits, dim=1)
+
+        logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
+
+        del input_ids, attention_mask, logits
+
+        return probabilities
+    
+
+    def get_topk(self, text: str, k=3) -> list:
+        
+        probabilities = self.__predict(text=text)
+        topk_prob, topk_indices = torch.topk(probabilities, k)
+
+        topk_prob = topk_prob.cpu().numpy()[0].tolist()
+        topk_indices = topk_indices.cpu().numpy()[0].tolist()
+
+        topk_labels = [self.languages[index] for index in topk_indices]
+
+        logger.debug(Fore.MAGENTA + f"top probilities: {topk_prob}, top labels: {topk_labels}" + Fore.RESET)
+
+        tmp = [(a, b) for a, b in zip(topk_labels, topk_prob)]
+
+        del probabilities, topk_labels, topk_prob
+
+        return tmp
+    
+
+    def __del__(self):
+        del self.model
+        del self.tokenizer
+    
