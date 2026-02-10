@@ -39,24 +39,21 @@ class OCRGPUWorker:
     def run(self, batch_size=16):
         end      = False
         last_run_on_track = False
-        end_signal_received = False
         batch    = []
         memory   = {}
         while end == False:
             try:
                 if last_run_on_track == False: 
-                    image, return_queue = self.process_queue.get(timeout=10)
+                    image, return_queue = self.process_queue.get(timeout=30)
 
-                    if return_queue == -1:
-                        end_signal_received = True
-                    else:
-                        message_template = deepcopy(self.message_template)
-                        message_template[0]["content"][0]["image"] = image
-                        batch.append(message_template)
-                        memory[str(len(batch)-1)] = return_queue
+                    message_template = deepcopy(self.message_template)
+                    message_template[0]["content"][0]["image"] = image
+                    batch.append(message_template)
+                    memory[str(len(batch)-1)] = return_queue
                 
 
-                if len(batch) == batch_size or end_signal_received == True: 
+                if len(batch) == batch_size: 
+                    last_run_on_track = False
 
                     if batch and memory:
                         texts = self.core.analyse(batch=batch)
@@ -65,11 +62,8 @@ class OCRGPUWorker:
                         batch.clear()
                         memory.clear()
 
-                    if end_signal_received == True:
-                        self.pass_queue.put_nowait((None, -1))
-                        end = True
-
             except:
+                logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
                 batch_size = len(batch)
                 last_run_on_track = True
         
@@ -97,20 +91,16 @@ class LangaugeGPUWorker:
         self.core = core(options=self.options) # type: ignore
 
 
-    def run(self):
+    def run(self, batch_size=16):
         end = False
         while end == False:
             if not self.pass_queue.empty():
                 original_text, return_queue = self.pass_queue.get()
                 logger.debug(f"{original_text}, {return_queue}")
 
-                if return_queue == -1:
-                    end = True
-                    continue
-                else:
-                    text = str(original_text).lower()
-                    combined = self.core.get_topk(text=text)
-                    self.queues[return_queue].put_nowait((original_text, combined))
+                text = str(original_text).lower()
+                combined = self.core.get_topk(text=text)
+                self.queues[return_queue].put_nowait((original_text, combined))
             else:
                 continue
 
@@ -150,6 +140,8 @@ class CPUWorker:
 
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
+
+        logger.debug(Fore.LIGHTYELLOW_EX + f"{queue_index} got queue: {return_queue}" + Fore.RESET)
         finished = []
         for image, item, track in pgs_data: # type: ignore
             

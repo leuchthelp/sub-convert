@@ -104,17 +104,29 @@ def main():
     manager = Manager()
     queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
 
+
     cpu_workers = 4
-    for index in range(4, cpu_workers+4+1):
+    gpu_ocr_workers = 2
+    gpu_lang_workers = 2
+    for index in range(2+gpu_ocr_workers+gpu_lang_workers, 1+cpu_workers+gpu_ocr_workers+gpu_lang_workers+1):
         queues[f"{index}"] = manager.Queue()
 
-    gpu_processes = [
-        Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run, args=(1,)), # type: ignore
-        Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run), # type: ignore
-    ]
-    [process.start() for process in gpu_processes]
-    runnable = CPUWorker(queues,  options) # type: ignore
 
+    gpu_ocr_batchsize = 1
+    gpu_ocr_processes: list[Process] = []
+    for _ in range(0, gpu_ocr_workers):
+        gpu_ocr_processes.append(Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run, args=(gpu_ocr_batchsize,))) # type: ignore
+    [process.start() for process in gpu_ocr_processes]
+
+
+    gpu_lang_batchsize = 1
+    gpu_lang_processes: list[Process] = []
+    for _ in range(0, gpu_lang_workers):
+        gpu_lang_processes.append(Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run, args=(gpu_lang_batchsize,))) # type: ignore
+    [process.start() for process in gpu_lang_processes]
+
+
+    runnable = CPUWorker(queues,  options) # type: ignore
     try:
         with progress:
             with Pool(processes=cpu_workers) as pool:
@@ -152,13 +164,22 @@ def main():
                         if progress.finished and not not tasks:
                             end = True
 
-                queues["ocr_queue"].put((None, -1))
+            [process.terminate() for process in gpu_ocr_processes]
+            [process.join() for process in gpu_ocr_processes]
+            [process.close() for process in gpu_ocr_processes]
 
-            [process.join() for process in gpu_processes]
-            [process.close() for process in gpu_processes]
+            [process.terminate() for process in gpu_lang_processes]
+            [process.join() for process in gpu_lang_processes]
+            [process.close() for process in gpu_lang_processes]
             
-    except:
-        [process.terminate() for process in gpu_processes]
+    except KeyboardInterrupt:
+        [process.terminate() for process in gpu_ocr_processes]
+        [process.join() for process in gpu_ocr_processes]
+        [process.close() for process in gpu_ocr_processes]
+        
+        [process.terminate() for process in gpu_lang_processes]
+        [process.join() for process in gpu_lang_processes]
+        [process.close() for process in gpu_lang_processes]
                       
     
 if __name__=="__main__":
