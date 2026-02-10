@@ -115,7 +115,7 @@ class OCRModelCore(ModelCore):
             trust_remote_code=True,
             dtype=torch.bfloat16,
             attn_implementation=attn_implementation, 
-        ).to(device=self.torch_device).eval()
+        ).to(device=self.torch_device).eval() # type: ignore
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
 
 

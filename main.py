@@ -19,7 +19,7 @@ import torch
 import os
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -87,7 +87,7 @@ def main():
             ]
     
     try:
-         set_start_method("forkserver")
+         set_start_method("forkserver", force=True)
     except RuntimeError:
         pass
     
@@ -104,58 +104,61 @@ def main():
     manager = Manager()
     queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
 
-    cpu_workers = 2
+    cpu_workers = 4
     for index in range(4, cpu_workers+4+1):
         queues[f"{index}"] = manager.Queue()
 
     gpu_processes = [
-        Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run),
-        Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run),
+        Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run, args=(1,)), # type: ignore
+        Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run), # type: ignore
     ]
     [process.start() for process in gpu_processes]
-    runnable = CPUWorker(queues,  options)
+    runnable = CPUWorker(queues,  options) # type: ignore
+
+    try:
+        with progress:
+            with Pool(processes=cpu_workers) as pool:
+                tasks = {}
+                task_queue      = queues["task_queue"]
+                progress_queue  = queues["progress_queue"]
+
+                for _ in pool.imap_unordered(runnable.run, pgs_managers):
+                    end = False
+                    while end == False:
+                        if task_queue.empty() == False:
+                            description, total = task_queue.get_nowait()
+                            task_id = progress.add_task(description=description, total=total, visible=True)
+
+                            task = [task for task in progress.tasks if task.id == task_id][0]
+                            tasks[description] = (task_id, task)
 
 
-    with progress:
-        with Pool(processes=cpu_workers) as pool:
-            tasks = {}
-            task_queue      = queues["task_queue"]
-            progress_queue  = queues["progress_queue"]
+                        if progress_queue.empty() == False:
+                            description = progress_queue.get_nowait()
+                            if description in tasks:
+                                task_id = tasks[description][0]
+                                progress.update(task_id=task_id, advance=1)
 
-            for _ in pool.imap_unordered(runnable.run, pgs_managers):
-                end = False
-                while end == False:
-                    if task_queue.empty() == False:
-                        description, total = task_queue.get_nowait()
-                        task_id = progress.add_task(description=description, total=total, visible=True)
+                                task = tasks[description][1]
 
-                        task = [task for task in progress.tasks if task.id == task_id][0]
-                        tasks[description] = (task_id, task)
+                                # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
+                                # Since file is still being saved and this only for fancy progressbar, should be ok
+                                if task.finished:
+                                    progress.update(task_id=task.id, visible=False)
 
 
-                    if progress_queue.empty() == False:
-                        description = progress_queue.get_nowait()
-                        if description in tasks:
-                            task_id = tasks[description][0]
-                            progress.update(task_id=task_id, advance=1)
+                        # There should at least be a couple of tasks present, before we consider our progress finished. 
+                        # Otherwise if the tool is tool slow, it will immidiately end the update loop
+                        if progress.finished and not not tasks:
+                            end = True
 
-                            task = tasks[description][1]
+                queues["ocr_queue"].put((None, -1))
 
-                            # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
-                            # Since file is still being saved and this only for fancy progressbar, should be ok
-                            if task.finished:
-                                progress.update(task_id=task.id, visible=False)
-
-                    
-                    # There should at least be a couple of tasks present, before we consider our progress finished. 
-                    # Otherwise if the tool is tool slow, it will immidiately end the update loop
-                    if progress.finished and not not tasks:
-                        end = True
-
-            queues["ocr_queue"].put((None, -1))
-
-        [process.join() for process in gpu_processes]
-        [process.close() for process in gpu_processes]
+            [process.join() for process in gpu_processes]
+            [process.close() for process in gpu_processes]
+            
+    except:
+        [process.terminate() for process in gpu_processes]
                       
     
 if __name__=="__main__":
