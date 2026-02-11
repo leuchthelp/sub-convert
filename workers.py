@@ -44,7 +44,7 @@ class OCRGPUWorker:
         while end == False:
             try:
                 if last_run_on_track == False: 
-                    image, return_queue = self.process_queue.get(timeout=30)
+                    image, return_queue = self.process_queue.get()
 
                     message_template = deepcopy(self.message_template)
                     message_template[0]["content"][0]["image"] = image
@@ -163,7 +163,6 @@ class CPUWorker:
 
         savable = {"items": [], "combined": []}  
         for index, (item, track, text) in enumerate(finished, start=1):
-            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
             
             combined = []
             if self.fallback == False:
@@ -179,6 +178,8 @@ class CPUWorker:
 
             if self.fallback == False:
                 savable["combined"].append(combined)
+            
+            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
         
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         
