@@ -17,7 +17,7 @@ class SubtitleTrackManager:
             options: dict,
     ):
         self.mkv_file = MKVFile(file_path=file_path)
-        self.tracks = (track for track in self.mkv_file.tracks if track.track_type == "subtitles")
+        self.tracks = (track for track in self.mkv_file.tracks if track.track_type == "subtitles" and track.track_codec == "HDMV PGS")
         self.options = options
 
 

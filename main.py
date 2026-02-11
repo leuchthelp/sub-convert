@@ -73,7 +73,7 @@ def main():
         options["fallback_status"] = True
 
     # Setup ocr prompt and message template
-    task = "ocr"
+    ocr_task = "ocr"
     prompts = {
         "ocr": "OCR:",
     }
@@ -81,7 +81,7 @@ def main():
                 {"role": "user",         
                  "content": [
                         {"type": "image", "image": None},
-                        {"type": "text", "text": prompts[task]},
+                        {"type": "text", "text": prompts[ocr_task]},
                     ]
                 }
             ]
@@ -156,7 +156,7 @@ def main():
                                 # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
                                 # Since file is still being saved and this only for fancy progressbar, should be ok
                                 if task.finished:
-                                    progress.update(task_id=task.id, visible=False)
+                                    progress.update(task_id=task.id, refresh=True, visible=False)
 
 
                         # There should at least be a couple of tasks present, before we consider our progress finished. 
