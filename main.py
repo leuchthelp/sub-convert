@@ -1,4 +1,4 @@
-from torch.multiprocessing import Manager, Pool, Process, set_start_method
+from torch.multiprocessing import Process, Manager, Pool, set_start_method
 from workers import OCRGPUWorker, LangaugeGPUWorker, CPUWorker
 from subtitle_track_manager import SubtitleTrackManager
 from model_core import OCRModelCore, LanguageModelCore
@@ -19,7 +19,7 @@ import torch
 import os
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -105,9 +105,9 @@ def main():
     queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
 
 
-    cpu_workers = 1
-    gpu_ocr_workers = 1
-    gpu_lang_workers = 1
+    cpu_workers = 6
+    gpu_ocr_workers = 3
+    gpu_lang_workers = 3
     for index in range(2+gpu_ocr_workers+gpu_lang_workers, 1+cpu_workers+gpu_ocr_workers+gpu_lang_workers+1):
         queues[f"{index}"] = manager.Queue()
 

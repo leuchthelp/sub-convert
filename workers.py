@@ -163,6 +163,7 @@ class CPUWorker:
 
         savable = {"items": [], "combined": []}  
         for index, (item, track, text) in enumerate(finished, start=1):
+            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
             
             combined = []
             if self.fallback == False:
@@ -179,7 +180,6 @@ class CPUWorker:
             if self.fallback == False:
                 savable["combined"].append(combined)
             
-            self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
         
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
         
