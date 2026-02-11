@@ -1,10 +1,9 @@
-from dataclasses import dataclass
-from colorama import Fore
-from pymkv import MKVFile
 from pgs_manager import PgsManager
+from dataclasses import dataclass
+from pymkv import MKVFile
 from pathlib import Path
-import typing
 import logging
+import typing
 
 logger = logging.getLogger(__name__)
 

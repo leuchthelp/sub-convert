@@ -86,23 +86,23 @@ class PgsSubtitleItem:
     def auto_fix(self, next_item: typing.Optional[PgsSubtitleItem]):
         valid = True
         if self.image is None:
-            logger.warning('Corrupted %r: No Image', self)
+            logger.warning('Corrupted: No Image')
             valid = False
         if self.y_offset is None:
-            logger.warning('Corrupted %r: No y_offset', self)
+            logger.warning('Corrupted: No y_offset')
             valid = False
         if self.x_offset is None:
-            logger.warning('Corrupted %r: No x_offset', self)
+            logger.warning('Corrupted: No x_offset')
             valid = False
         if self.start is None:
-            logger.warning('Corrupted %r: No Start timestamp', self)
+            logger.warning('Corrupted: No Start timestamp')
             valid = False
         elif not self.end or self.end <= self.start:
             if next_item and next_item.start and self.start + 10000 >= next_item.start:
                 self.end = max(self.start + 1, next_item.start - 1)
-                logger.debug('Fix applied for %r: Subtitle end timestamp was fixed', self)
+                logger.debug('Fix applied for: Subtitle end timestamp was fixed')
             else:
-                logger.warning('Corrupted %r: Subtitle with corrupted end timestamp', self)
+                logger.warning('Corrupted: Subtitle with corrupted end timestamp')
                 valid = False
 
         return valid
@@ -159,7 +159,7 @@ class Pgs:
 
     def __exit__(self):
         self._items = None
-        keep = True
+        keep = False
         if keep:
             logger.info('Keeping temporary files in %s', self.temp_folder)
         else:
