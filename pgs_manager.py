@@ -32,7 +32,7 @@ class PgsManager:
         self.tmp_path.mkdir(parents=True)
 
 
-    def get_pgs_images(self) -> list[tuple[Image, PgsSubtitleItem, MKVTrack]]:
+    def get_pgs_images(self) -> list[tuple[Image, PgsSubtitleItem, MKVTrack]]: # type: ignore
         tmp_file = f"{self.tmp_path}/{self.mkv_track.file_path}-{self.mkv_track.track_id}-{self.mkv_track.track_codec}.sup"
         cmd = ["mkvextract", self.mkv_track.file_path, "tracks", f"{self.mkv_track.track_id}:{tmp_file}"]
 
@@ -43,5 +43,5 @@ class PgsManager:
 
         shutil.rmtree(path=self.tmp_path)
 
-        return [(Image.fromarray(item.image.data), item, self.mkv_track) for item in self.pgs_items]
+        return [(Image.fromarray(item.image.data), item, self.mkv_track) for item in self.pgs_items] # type: ignore
 

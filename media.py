@@ -100,7 +100,7 @@ class PgsSubtitleItem:
         elif not self.end or self.end <= self.start:
             if next_item and next_item.start and self.start + 10000 >= next_item.start:
                 self.end = max(self.start + 1, next_item.start - 1)
-                logger.info('Fix applied for %r: Subtitle end timestamp was fixed', self)
+                logger.debug('Fix applied for %r: Subtitle end timestamp was fixed', self)
             else:
                 logger.warning('Corrupted %r: Subtitle with corrupted end timestamp', self)
                 valid = False
@@ -130,7 +130,7 @@ class Pgs:
         self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
 
     @property
-    def items(self) -> list:
+    def items(self) -> list[PgsSubtitleItem] | None:
         if self._items is None:
             data = self.data_reader()
             self._items = self.decode(data)
