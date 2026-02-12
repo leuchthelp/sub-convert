@@ -1,17 +1,18 @@
 from __future__ import annotations
-
-import json
-import logging
-import os
-import shutil
-import typing
 from pgs import DisplaySet, Palette, PgsImage, PgsReader
 from utils import pairwise
+import shutil
+import typing
+import logging
+import json
+import os
+
 
 logger = logging.getLogger(__name__)
 
 
 class PgsSubtitleItem:
+    __slots__ = ("index", "start", "end", "image", "x_offset", "y_offset", "text", "place")
 
     def __init__(self,
                  index: int,
@@ -26,7 +27,7 @@ class PgsSubtitleItem:
         self.place: typing.Optional[typing.Tuple[int, int, int, int]] = None
 
     @staticmethod
-    def create_items(display_sets: typing.Iterable[DisplaySet]):
+    def create_items(display_sets: typing.Iterable[DisplaySet]) -> list[PgsSubtitleItem]:
         current_sets: typing.List[DisplaySet] = []
         index = 0
         candidates: typing.List[PgsSubtitleItem] = []
@@ -120,6 +121,7 @@ class PgsSubtitleItem:
 
 
 class Pgs:
+    __slots__ = ("data_reader", "temp_folder", "_items", "display_sets")
 
     def __init__(self,
                  data_reader: typing.Callable[[], bytes],
@@ -137,7 +139,7 @@ class Pgs:
         return self._items
 
 
-    def decode(self, data: bytes) -> PgsSubtitleItem:
+    def decode(self, data: bytes) -> list[PgsSubtitleItem]:
         display_sets = list(PgsReader.decode(data))
         self.display_sets = display_sets
 

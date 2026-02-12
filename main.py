@@ -16,7 +16,6 @@ import argparse
 import logging
 import torch
 import os
-import gc
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -142,7 +141,7 @@ def main():
     gpu_ocr_processes: list[Process] = []
     gpu_core = OCRModelCore(options=options)
     for _ in range(0, gpu_ocr_workers):
-        gpu_ocr_processes.append(Process(target=OCRGPUWorker(message_template=message_template, core=gpu_core, queues=queues, options=options).run, args=(gpu_ocr_batchsize,))) # type: ignore
+        gpu_ocr_processes.append(Process(target=OCRGPUWorker(core=gpu_core, queues=queues).run, args=(message_template, gpu_ocr_batchsize,))) # type: ignore
     del gpu_core
 
 
@@ -150,7 +149,7 @@ def main():
     gpu_lang_processes: list[Process] = []
     lang_core = LanguageModelCore(options=options)
     for _ in range(0, gpu_lang_workers):
-        gpu_lang_processes.append(Process(target=LangaugeGPUWorker(core=lang_core, queues=queues, options=options).run, args=(gpu_lang_batchsize,))) # type: ignore
+        gpu_lang_processes.append(Process(target=LangaugeGPUWorker(core=lang_core, queues=queues).run, args=(gpu_lang_batchsize,))) # type: ignore
     del lang_core
 
     try:
