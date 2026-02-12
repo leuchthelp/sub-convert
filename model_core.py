@@ -48,7 +48,7 @@ class OCRModelCore(ModelCore):
             trust_remote_code=True,
             dtype=torch.bfloat16,
             attn_implementation=attn_implementation, 
-        ).to(device=self.torch_device).eval() # type: ignore
+        ).to(device=self.torch_device).eval().share_memory() # type: ignore
         self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, use_fast=True)
 
 
@@ -76,7 +76,7 @@ class OCRModelCore(ModelCore):
         texts = self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
         logger.debug(Fore.CYAN+ f"clean text: {texts}" + Fore.RESET)
-        del inputs
+        del inputs, generated_ids_trimmed, out
 
         return texts
     
@@ -101,11 +101,11 @@ class LanguageModelCore(ModelCore):
     ):  
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path=model_name, num_labels=45)
-        self.torch_device = torch.device(options["torch_device"])
+        self.torch_device = options["torch_device"] if "torch_device" in options else "cpu"
         self.languages = languages
 
         self.model.to(self.torch_device)
-        self.model.eval()
+        self.model.eval().share_memory()
         
 
     def __predict(self, text: str) -> torch.Tensor:
@@ -124,7 +124,7 @@ class LanguageModelCore(ModelCore):
 
         logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
 
-        del input_ids, attention_mask, logits
+        del input_ids, attention_mask, logits, outputs, tokenized
 
         return probabilities
     
@@ -143,7 +143,7 @@ class LanguageModelCore(ModelCore):
 
         tmp = [(a, b) for a, b in zip(topk_labels, topk_prob)]
 
-        del probabilities, topk_labels, topk_prob
+        del probabilities, topk_labels, topk_prob, topk_indices
 
         return tmp
     

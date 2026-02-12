@@ -1,4 +1,4 @@
-from pymkv import  MKVTrack, MKVFile
+from pymkv import  MKVTrack
 from media import PgsSubtitleItem
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,17 +13,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PgsManager:
+    __slots__ = ("mkv_track", "hash", "tmp_path", "pgs_items")
 
     def __init__(
             self,
             mkv_track: MKVTrack,
-            mkv_file: MKVFile,
             options : dict,
     ):
         
         self.mkv_track= mkv_track
-        self.mkv_file = mkv_file
-        self.options  = options
         self.hash     = hashlib.sha256(str(self.mkv_track).encode()).hexdigest()
         self.tmp_path = Path(f"{options["path_to_tmp"]}/{self.hash}")
 

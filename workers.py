@@ -29,10 +29,11 @@ class OCRGPUWorker:
         ):
         self.process_queue  = queues["ocr_queue"]
         self.pass_queue     = queues["pass_queue"]
+        del queues
         self.options        = options
         self.torch_device   = self.options["torch_device"]
 
-        self.core = core(options=self.options) # type: ignore
+        self.core = core # type: ignore
         self.message_template = message_template
 
 
@@ -89,7 +90,7 @@ class LangaugeGPUWorker:
         self.options        = options
         self.torch_device   = self.options["torch_device"]
 
-        self.core = core(options=self.options) # type: ignore
+        self.core = core # type: ignore
 
 
     def run(self, batch_size=16):

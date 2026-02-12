@@ -16,6 +16,7 @@ import argparse
 import logging
 import torch
 import os
+import gc
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -75,7 +76,7 @@ def main():
 
     # Get mkv files to extract subtitles from
     convertibles = get_candidates(root=root, options=options)
-    pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
+    pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path).get_pgs_managers(options=options) for path in convertibles))
 
 
     # Setup basic options relating to pytorch and set environmental variables if needed
@@ -139,25 +140,30 @@ def main():
 
     gpu_ocr_batchsize = 1
     gpu_ocr_processes: list[Process] = []
+    gpu_core = OCRModelCore(options=options)
     for _ in range(0, gpu_ocr_workers):
-        gpu_ocr_processes.append(Process(target=OCRGPUWorker(message_template=message_template, core=OCRModelCore, queues=queues, options=options).run, args=(gpu_ocr_batchsize,))) # type: ignore
-    [process.start() for process in gpu_ocr_processes]
+        gpu_ocr_processes.append(Process(target=OCRGPUWorker(message_template=message_template, core=gpu_core, queues=queues, options=options).run, args=(gpu_ocr_batchsize,))) # type: ignore
+    del gpu_core
 
 
     gpu_lang_batchsize = 1
     gpu_lang_processes: list[Process] = []
+    lang_core = LanguageModelCore(options=options)
     for _ in range(0, gpu_lang_workers):
-        gpu_lang_processes.append(Process(target=LangaugeGPUWorker(core=LanguageModelCore, queues=queues, options=options).run, args=(gpu_lang_batchsize,))) # type: ignore
-    [process.start() for process in gpu_lang_processes]
+        gpu_lang_processes.append(Process(target=LangaugeGPUWorker(core=lang_core, queues=queues, options=options).run, args=(gpu_lang_batchsize,))) # type: ignore
+    del lang_core
 
-
-    runnable = CPUWorker(queues,  options) # type: ignore
     try:
+        [process.start() for process in gpu_ocr_processes]
+        [process.start() for process in gpu_lang_processes]
+    
+        runnable = CPUWorker(queues,  options) # type: ignore
         with progress:
             with Pool(processes=cpu_workers) as pool:
                 tasks = {}
                 task_queue      = queues["task_queue"]
                 progress_queue  = queues["progress_queue"]
+                del queues
 
                 for _ in pool.imap_unordered(runnable.run, pgs_managers):
                     end = False
@@ -188,16 +194,11 @@ def main():
                         # Otherwise if the tool is tool slow, it will immidiately end the update loop
                         if progress.finished and not not tasks:
                             end = True
-
-            [process.terminate() for process in gpu_ocr_processes]
-            [process.join() for process in gpu_ocr_processes]
-            [process.close() for process in gpu_ocr_processes]
-
-            [process.terminate() for process in gpu_lang_processes]
-            [process.join() for process in gpu_lang_processes]
-            [process.close() for process in gpu_lang_processes]
             
     except KeyboardInterrupt:
+        pass
+
+    finally:
         [process.terminate() for process in gpu_ocr_processes]
         [process.join() for process in gpu_ocr_processes]
         [process.close() for process in gpu_ocr_processes]
