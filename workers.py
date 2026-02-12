@@ -19,25 +19,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OCRGPUWorker:
+    __slots__ = ("process_queue", "pass_queue", "message_template", "core")
 
     def __init__(
             self,
-            message_template: dict,
             core: OCRModelCore,
             queues: dict[str, Queue],
-            options={},
         ):
-        self.process_queue  = queues["ocr_queue"]
-        self.pass_queue     = queues["pass_queue"]
+        self.process_queue = queues["ocr_queue"]
+        self.pass_queue    = queues["pass_queue"]
+        self.core = core
         del queues
-        self.options        = options
-        self.torch_device   = self.options["torch_device"]
-
-        self.core = core # type: ignore
-        self.message_template = message_template
 
 
-    def run(self, batch_size=16):
+    def run(self, message_template: list, batch_size=16):
         end      = False
         last_run_on_track = False
         batch    = []
@@ -48,9 +43,9 @@ class OCRGPUWorker:
                     self.process_queue.qsize()
                     image, return_queue = self.process_queue.get()
 
-                    message_template = deepcopy(self.message_template)
-                    message_template[0]["content"][0]["image"] = image
-                    batch.append(message_template)
+                    tmp_template = deepcopy(message_template)
+                    tmp_template[0]["content"][0]["image"] = image
+                    batch.append(tmp_template)
                     memory[str(len(batch)-1)] = return_queue
                 
 
@@ -78,19 +73,16 @@ class OCRGPUWorker:
     
 @dataclass
 class LangaugeGPUWorker:
+    __slots__ = ("pass_queue", "queues", "core")
 
     def __init__(
             self,
             core: LanguageModelCore,
             queues: dict[str, Queue],
-            options={},
         ):
-        self.pass_queue     = queues["pass_queue"]
-        self.queues         = queues
-        self.options        = options
-        self.torch_device   = self.options["torch_device"]
-
-        self.core = core # type: ignore
+        self.pass_queue = queues["pass_queue"]
+        self.queues     = queues
+        self.core       = core
 
 
     def run(self, batch_size=16):
@@ -112,6 +104,7 @@ class LangaugeGPUWorker:
         
 @dataclass
 class CPUWorker:
+    __slots__ = ("gpu_ocr_queue", "queues", "task_queue", "progress_queue", "fallback", "override_if_exists")
 
     def __init__(
             self,

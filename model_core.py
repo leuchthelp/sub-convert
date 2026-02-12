@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from colorama import Fore
 import logging
-import typing
 
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import AutoModelForCausalLM, AutoProcessor
@@ -9,7 +8,7 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-languages = [
+static_languages = [
     "ar", "eu", "br", "ca", "zh", "Chinese_Hongkong", 
     "Chinese_Taiwan", "cv", "cs", "dv", "nl", "en", 
     "eo", "et", "fr", "fy", "ka", "de", "el", 
@@ -29,8 +28,7 @@ class ModelCore:
 
 @dataclass
 class OCRModelCore(ModelCore):
-
-    model: typing.Any
+    __slots__ = ("model", "processor", "torch_device")
 
     def __init__(
         self,
@@ -88,15 +86,13 @@ class OCRModelCore(ModelCore):
 
 @dataclass
 class LanguageModelCore(ModelCore):
-
-
-    model: typing.Any
+    __slots__ = ("model", "processor", "torch_device", "languages", "tokenizer")
 
 
     def __init__(
         self,
         model_name="Mike0307/multilingual-e5-language-detection",
-        languages=languages,
+        languages=static_languages,
         options={}
     ):  
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
