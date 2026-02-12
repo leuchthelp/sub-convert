@@ -40,7 +40,6 @@ class OCRGPUWorker:
         while end == False:
             try:
                 if last_run_on_track == False: 
-                    self.process_queue.qsize()
                     image, return_queue = self.process_queue.get()
 
                     tmp_template = deepcopy(message_template)
@@ -132,7 +131,6 @@ class CPUWorker:
 
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
-        return_queue.qsize()
 
         logger.debug(Fore.LIGHTYELLOW_EX + f"{queue_index} got queue: {return_queue}" + Fore.RESET)
         finished = []
