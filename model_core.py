@@ -36,7 +36,7 @@ class OCRModelCore(ModelCore):
 
     def __init__(
         self,
-        model_name="PaddlePaddle/PaddleOCR-VL",
+        model_name="PaddlePaddle/PaddleOCR-VL-1.5",
         options={},
     ):
         self.torch_device = options["torch_device"]
