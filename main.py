@@ -125,15 +125,16 @@ def main():
         )
     
     # Setup gpu processes and queues used for communication
-    manager = Manager()
-    queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
+    progress_manager = Manager()
+    gpu_manager = Manager()
+    queues  = {"ocr_queue": gpu_manager.Queue(), "pass_queue": gpu_manager.Queue(), "task_queue": progress_manager.Queue(), "progress_queue": progress_manager.Queue()}
 
 
     cpu_workers = args.cpu_workers
     gpu_ocr_workers = args.ocr_workers
     gpu_lang_workers = args.lang_workers
-    for index in range(2+gpu_ocr_workers+gpu_lang_workers, 1+cpu_workers+gpu_ocr_workers+gpu_lang_workers+1):
-        queues[f"{index}"] = manager.Queue()
+    for index in range(3+gpu_ocr_workers+gpu_lang_workers, 2+cpu_workers+gpu_ocr_workers+gpu_lang_workers+1):
+        queues[f"{index}"] = progress_manager.Queue()
 
 
     gpu_ocr_batchsize = 1
