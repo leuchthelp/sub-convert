@@ -44,6 +44,7 @@ class OCRGPUWorker:
         while end == False:
             try:
                 if last_run_on_track == False: 
+                    self.process_queue.qsize()
                     image, return_queue = self.process_queue.get()
 
                     message_template = deepcopy(self.message_template)
@@ -94,15 +95,12 @@ class LangaugeGPUWorker:
     def run(self, batch_size=16):
         end = False
         while end == False:
-            if not self.pass_queue.empty():
-                original_text, return_queue = self.pass_queue.get()
-                logger.debug(f"{original_text}, {return_queue}")
+            original_text, return_queue = self.pass_queue.get()
+            logger.debug(f"{original_text}, {return_queue}")
 
-                text = str(original_text).lower()
-                combined = self.core.get_topk(text=text)
-                self.queues[return_queue].put_nowait((original_text, combined))
-            else:
-                continue
+            text = str(original_text).lower()
+            combined = self.core.get_topk(text=text)
+            self.queues[return_queue].put_nowait((original_text, combined))
 
         logger.debug(Fore.MAGENTA + "LanguageGPUWorker ended" + Fore.RESET)
 
@@ -140,6 +138,7 @@ class CPUWorker:
 
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
+        return_queue.qsize()
 
         logger.debug(Fore.LIGHTYELLOW_EX + f"{queue_index} got queue: {return_queue}" + Fore.RESET)
         finished = []
