@@ -11,7 +11,6 @@ from rich.progress import (
     TimeRemainingColumn,
     MofNCompleteColumn,
 )
-from colorama import Fore
 from pathlib import Path
 import argparse
 import logging
@@ -23,13 +22,41 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
+def check_if_adjacent_exists(path: Path) -> bool:
+    for file in Path(path.parent).glob("*"):
+        tmp_name = str(path.name).replace(".mkv", "")
+        logger.debug(f"{tmp_name} is in {file.name}: {tmp_name in file.name and path.name != file.name}?")
+        if tmp_name in file.name and path.name != file.name:
+            return True
+    return False
+
+
+def get_candidates(root: Path, options: dict):
+    if root.is_file():
+        yield root.absolute()
+
+    for file in root.rglob("*.mkv"):
+        if file.is_file():
+            if options["skip_if_existing"]:
+                if check_if_adjacent_exists(path=file) == False:
+                    yield file.absolute()
+            else:
+                yield file.absolute()
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="PGS subtitle conversion using OCR and language identification on MKV files.",
         description="run python based PGS subtitle recognition",
     )
-    parser.add_argument("-p", "--path", type=str, default="", help="Directory path to .mkv files. Will recursively scan subdirectories.")
-    parser.add_argument("-o", "--override", type=bool, default=False, help="Override existing .srt file. Default: False")
+    parser.add_argument("-p", "--path",             type=str, default="test-files", help="Directory path to .mkv files. Will recursively scan subdirectories.")
+    parser.add_argument("-o", "--override",         type=bool, default=False, help="Override existing .srt file. Default: False")
+    parser.add_argument("-s", "--skip_if_exists",   type=bool, default=False, help="Skip extracting and converting tracks if adjacent .srt track for file exist. Default: False")
+    
+    parser.add_argument("-c", "--cpu_workers",   type=int, default=4, help="Number of CPU workers. Default: 4")
+    parser.add_argument("-ow", "--ocr_workers",  type=int, default=1, help="Number of OCR model workers, either on GPU or CPU. Default: 1")
+    parser.add_argument("-lw", "--lang_workers", type=int, default=1, help="Number of Language model workers, either on GPU or CPU. Default: 1")
+    parser.add_argument("-b", "--batchsize",     type=int, default=1, help="Size of the batch send to the OCR model. USE WITH CAUTION ON AMD GPU! Default: 1")
     args = parser.parse_args()
 
     
@@ -39,20 +66,17 @@ def main():
         tmp_path.mkdir()
     options = {
         "path_to_tmp": "tmp",
-        "override_if_exists": args.override
+        "override_if_exists": args.override,
+        "skip_if_existing"  : args.skip_if_exists
     }
 
-    root = Path("test-files")
-    if args.path:
-        root = Path(args.path)
+    root = Path(args.path)
 
 
     # Get mkv files to extract subtitles from
-    if root.is_file():
-        convertibles = [root.absolute()]
-    else:
-        convertibles = (path.absolute() for path in root.rglob("*") if not path.is_dir() and ".mkv" in path.name)
+    convertibles = get_candidates(root=root, options=options)
     pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path, options=options).get_pgs_managers() for path in convertibles))
+
 
     # Setup basic options relating to pytorch and set environmental variables if needed
     options["fallback_status"] = False
@@ -105,9 +129,9 @@ def main():
     queues  = {"ocr_queue": manager.Queue(), "pass_queue": manager.Queue(), "task_queue": manager.Queue(), "progress_queue": manager.Queue()}
 
 
-    cpu_workers = 6
-    gpu_ocr_workers = 3
-    gpu_lang_workers = 3
+    cpu_workers = args.cpu_workers
+    gpu_ocr_workers = args.ocr_workers
+    gpu_lang_workers = args.lang_workers
     for index in range(2+gpu_ocr_workers+gpu_lang_workers, 1+cpu_workers+gpu_ocr_workers+gpu_lang_workers+1):
         queues[f"{index}"] = manager.Queue()
 
