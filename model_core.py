@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from colorama import Fore
 import logging
+import os 
+
+os.environ['TRANSFORMERS_OFFLINE'] = '1' 
+os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
 
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from transformers import AutoModelForCausalLM, AutoProcessor
