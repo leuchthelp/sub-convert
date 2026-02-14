@@ -56,6 +56,20 @@ options = {
 ```
 inside the `main()` of the script. 
 
+Using `-s True` will skip a files for which subtitle already exists. Due to the fact that naming cannot be inferred back to the tracks within a file no track will be processed even if the subtitles found only belong to one of multiple tracks in the `MKV` file.
+
+The current architecture allows you to launch `N` OCR model gpu workers followed by `N` language model gpu workers. `N=4` cpu workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
+
+The amount of workers can be adjusted with the following arguments:
+
+```console
+-c, --cpu_workers N
+-ow, --ocr_workers N
+-lw, --lang_workers N
+```
+
+Additionally the `-b, --batchsize` arguments exists to batch imaged for inference, however, this options has not been tested much due to AMD gpu crashes - use with caution.
+
 ## Shortcomings include:
 
 - the use of tesseract for OCR
@@ -66,14 +80,14 @@ inside the `main()` of the script.
 
 ## To fix these issues the following conceptual changes have been applied:
 
-- add [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL) as the main OCR, tesseract exists as a fallback
+- add [PaddlePaddle/PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) as the main OCR, tesseract exists as a fallback
 - add [Mike0307/multilingual-e5-language-detection](https://huggingface.co/Mike0307/multilingual-e5-language-detection) for language detection
 - assume subtitles is forced if less than 150 subtitles items are with the track, otherwise set flag if set in original file
 - parallelism via `multiprocessing`, 4 different subtitles track will be converted at a time (can be configured)
 
 ## Caveats
 
-Going with a traditional tesseract approach is quite reasonable and sensible. Tesseract is much fast and requires less resources in terms of RAM, VRAM or additional GPUs. As such this approach will require more resources and take longer for full scans of large libraries. Be wary.
+Going with a traditional tesseract approach is better in 90% of cases. Tesseract is much fast and requires less resources in terms of RAM, VRAM or additional GPUs. As such this approach will require more resources and take longer for full scans of large libraries. Be wary.
 
 Additionally tools like [Subtitle Edit](https://www.nikse.dk/subtitleedit) do exists, which will always be more accurate and stable due to the sheer amount of work already poured into the project.
 
