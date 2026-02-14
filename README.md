@@ -32,7 +32,9 @@ If you do not install flash_attention, the tool will fallback to pytorches integ
 
 ## Usage
 
-Either you interact with the [main.py](main.py) script directly and change `root = Path("test-files")` inside the `main()` to a directory of your choice. 
+The script provides progress bars for each cpu worker launched. If the progressbar shows a stalled process it is most like a visual bug with `rich` the process will have finished if overall progress bars for `N = number of cpu workers` are displayed.
+
+You either interact with the [main.py](main.py) script directly and change `root` inside the `main()` to a directory of your choice. 
 
 Or you interact with the tool via cli, like:
 
@@ -58,7 +60,13 @@ inside the `main()` of the script.
 
 Using `-s True` will skip a files for which subtitle already exists. Due to the fact that naming cannot be inferred back to the tracks within a file no track will be processed even if the subtitles found only belong to one of multiple tracks in the `MKV` file.
 
-The current architecture allows you to launch `N` OCR model gpu workers followed by `N` language model gpu workers. `N=4` cpu workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
+The current architecture allows you to launch `N` OCR model GPU workers followed by `N` language model GPU workers. `N=4` cpu workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
+
+Each worker is launches as a separate process meaning you will need at least `N_cw + N_ow + N_lw + 2` threads available on your system. The extra `+2` are Manager with handle communication between processes via `Queues`. One manager controls the GPU queues, while the other controls the cpu and progress queues (used for progress bar). 
+
+All cpu workers queue their images towards a global GPU queue. OCR GPU workers than draw items from the  first and process the image. Once processed the extracted text is passed through another queue towards the language model workers which classify the language of the text. 
+
+Finally the language model workers send the text with the language classification back to the cpu worker who initially processes this item, ensuring processed tracks remain consistent and ordered.
 
 The amount of workers can be adjusted with the following arguments:
 
@@ -68,7 +76,7 @@ The amount of workers can be adjusted with the following arguments:
 -lw, --lang_workers N
 ```
 
-Additionally the `-b, --batchsize` arguments exists to batch imaged for inference, however, this options has not been tested much due to AMD gpu crashes - use with caution.
+Additionally the `-b, --batchsize` arguments exists to batch imaged for inference, however, this options has not been tested much due to AMD GPU crashes - use with caution.
 
 ## Shortcomings include:
 
