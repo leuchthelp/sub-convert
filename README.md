@@ -32,7 +32,9 @@ If you do not install flash_attention, the tool will fallback to pytorches integ
 
 ## Usage
 
-Either you interact with the [main.py](main.py) script directly and change `root = Path("test-files")` inside the `main()` to a directory of your choice. 
+The script provides progress bars for each cpu worker launched. If the progressbar shows a stalled process it is most like a visual bug with `rich` the process will have finished if overall progress bars for `N = number of cpu workers` are displayed.
+
+You either interact with the [main.py](main.py) script directly and change `root` inside the `main()` to a directory of your choice. 
 
 Or you interact with the tool via cli, like:
 
@@ -56,6 +58,26 @@ options = {
 ```
 inside the `main()` of the script. 
 
+Using `-s True` will skip a files for which subtitle already exists. Due to the fact that naming cannot be inferred back to the tracks within a file no track will be processed even if the subtitles found only belong to one of multiple tracks in the `MKV` file.
+
+The current architecture allows you to launch `N` OCR model GPU workers followed by `N` language model GPU workers. `N=4` cpu workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
+
+Each worker is launches as a separate process meaning you will need at least `N_cw + N_ow + N_lw + 2` threads available on your system. The extra `+2` are Manager with handle communication between processes via `Queues`. One manager controls the GPU queues, while the other controls the cpu and progress queues (used for progress bar). 
+
+All cpu workers queue their images towards a global GPU queue. OCR GPU workers than draw items from the  first and process the image. Once processed the extracted text is passed through another queue towards the language model workers which classify the language of the text. 
+
+Finally the language model workers send the text with the language classification back to the cpu worker who initially processes this item, ensuring processed tracks remain consistent and ordered.
+
+The amount of workers can be adjusted with the following arguments:
+
+```console
+-c, --cpu_workers N
+-ow, --ocr_workers N
+-lw, --lang_workers N
+```
+
+Additionally the `-b, --batchsize` arguments exists to batch imaged for inference, however, this options has not been tested much due to AMD GPU crashes - use with caution.
+
 ## Shortcomings include:
 
 - the use of tesseract for OCR
@@ -66,14 +88,14 @@ inside the `main()` of the script.
 
 ## To fix these issues the following conceptual changes have been applied:
 
-- add [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL) as the main OCR, tesseract exists as a fallback
+- add [PaddlePaddle/PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) as the main OCR, tesseract exists as a fallback
 - add [Mike0307/multilingual-e5-language-detection](https://huggingface.co/Mike0307/multilingual-e5-language-detection) for language detection
 - assume subtitles is forced if less than 150 subtitles items are with the track, otherwise set flag if set in original file
 - parallelism via `multiprocessing`, 4 different subtitles track will be converted at a time (can be configured)
 
 ## Caveats
 
-Going with a traditional tesseract approach is quite reasonable and sensible. Tesseract is much fast and requires less resources in terms of RAM, VRAM or additional GPUs. As such this approach will require more resources and take longer for full scans of large libraries. Be wary.
+Going with a traditional tesseract approach is better in 90% of cases. Tesseract is much fast and requires less resources in terms of RAM, VRAM or additional GPUs. As such this approach will require more resources and take longer for full scans of large libraries. Be wary.
 
 Additionally tools like [Subtitle Edit](https://www.nikse.dk/subtitleedit) do exists, which will always be more accurate and stable due to the sheer amount of work already poured into the project.
 

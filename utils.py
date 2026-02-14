@@ -1,6 +1,5 @@
-import typing
-
 from pysrt import SubRipTime
+import typing
 
 
 def from_hex(b: bytes):
