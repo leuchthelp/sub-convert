@@ -1,10 +1,9 @@
-import enum
+from utils import from_hex, safe_get, to_time
+from numpy import ndarray
+import numpy as np
 import logging
 import typing
-
-import numpy as np
-from numpy import ndarray
-from utils import from_hex, safe_get, to_time
+import enum
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +39,7 @@ class Palette(typing.NamedTuple):
 
 
 class PgsReader:
+    __slots__ = ()
 
     @classmethod
     def read_segments(cls, data: bytes):
@@ -73,6 +73,7 @@ class PgsReader:
 
 
 class PgsImage:
+    __slots__ = ("rle_data", "palettes", "_data")
 
     def __init__(self, data: bytes, palettes: typing.List[Palette]):
         self.rle_data = data
@@ -142,29 +143,30 @@ class PgsImage:
 
 
 class BaseSegment:
+    __slots__ = ("raw")
 
     def __init__(self, b: bytes):
-        self.bytes = b
+        self.raw = b
 
     @property
     def presentation_timestamp(self):
-        return to_time(from_hex(self.bytes[2:6]) // 90)
+        return to_time(from_hex(self.raw[2:6]) // 90)
 
     @property
     def decoding_timestamp(self):
-        return to_time(from_hex(self.bytes[6:10]) // 90)
+        return to_time(from_hex(self.raw[6:10]) // 90)
 
     @property
     def type(self):
-        return SegmentType(self.bytes[10])
+        return SegmentType(self.raw[10])
 
     @property
     def size(self):
-        return from_hex(self.bytes[11:13])
+        return from_hex(self.raw[11:13])
 
     @property
     def data(self):
-        return self.bytes[13:]
+        return self.raw[13:]
 
     def to_json(self):
         attributes = {
@@ -204,6 +206,7 @@ class BaseSegment:
 
 
 class PresentationCompositionSegment(BaseSegment):
+    __slots__ = ()
 
     @property
     def width(self):
@@ -254,6 +257,7 @@ class PresentationCompositionSegment(BaseSegment):
 
 
 class WindowDefinitionSegment(BaseSegment):
+    __slots__ = ()
 
     @property
     def num_windows(self):
@@ -291,6 +295,7 @@ class WindowDefinitionSegment(BaseSegment):
 
 
 class PaletteDefinitionSegment(BaseSegment):
+    __slots__ = ("palettes")
 
     def __init__(self, b: bytes):
         super().__init__(b)
@@ -317,6 +322,7 @@ class PaletteDefinitionSegment(BaseSegment):
 
 
 class ObjectDefinitionSegment(BaseSegment):
+    __slots__ = ()
 
     @property
     def id(self):
@@ -364,6 +370,7 @@ class ObjectDefinitionSegment(BaseSegment):
 
 
 class EndSegment(BaseSegment):
+    __slots__ = ()
 
     def attributes(self):
         return {}
@@ -379,6 +386,7 @@ SEGMENT_TYPE = {
 
 
 class DisplaySet:
+    __slots__ = ("index", "segments")
 
     def __init__(self, index: int, segments: typing.List[BaseSegment]):
         self.index = index

@@ -1,17 +1,18 @@
 from __future__ import annotations
-
-import json
-import logging
-import os
-import shutil
-import typing
 from pgs import DisplaySet, Palette, PgsImage, PgsReader
 from utils import pairwise
+import shutil
+import typing
+import logging
+import json
+import os
+
 
 logger = logging.getLogger(__name__)
 
 
 class PgsSubtitleItem:
+    __slots__ = ("index", "start", "end", "image", "x_offset", "y_offset", "text", "place")
 
     def __init__(self,
                  index: int,
@@ -26,7 +27,7 @@ class PgsSubtitleItem:
         self.place: typing.Optional[typing.Tuple[int, int, int, int]] = None
 
     @staticmethod
-    def create_items(display_sets: typing.Iterable[DisplaySet]):
+    def create_items(display_sets: typing.Iterable[DisplaySet]) -> list[PgsSubtitleItem]:
         current_sets: typing.List[DisplaySet] = []
         index = 0
         candidates: typing.List[PgsSubtitleItem] = []
@@ -100,7 +101,7 @@ class PgsSubtitleItem:
         elif not self.end or self.end <= self.start:
             if next_item and next_item.start and self.start + 10000 >= next_item.start:
                 self.end = max(self.start + 1, next_item.start - 1)
-                logger.info('Fix applied for %r: Subtitle end timestamp was fixed', self)
+                logger.debug('Fix applied for %r: Subtitle end timestamp was fixed', self)
             else:
                 logger.warning('Corrupted %r: Subtitle with corrupted end timestamp', self)
                 valid = False
@@ -120,6 +121,7 @@ class PgsSubtitleItem:
 
 
 class Pgs:
+    __slots__ = ("data_reader", "temp_folder", "_items", "display_sets")
 
     def __init__(self,
                  data_reader: typing.Callable[[], bytes],
@@ -130,14 +132,14 @@ class Pgs:
         self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
 
     @property
-    def items(self) -> list:
+    def items(self) -> list[PgsSubtitleItem] | None:
         if self._items is None:
             data = self.data_reader()
             self._items = self.decode(data)
         return self._items
 
 
-    def decode(self, data: bytes) -> PgsSubtitleItem:
+    def decode(self, data: bytes) -> list[PgsSubtitleItem]:
         display_sets = list(PgsReader.decode(data))
         self.display_sets = display_sets
 
@@ -159,7 +161,7 @@ class Pgs:
 
     def __exit__(self):
         self._items = None
-        keep = True
+        keep = False
         if keep:
             logger.info('Keeping temporary files in %s', self.temp_folder)
         else:
