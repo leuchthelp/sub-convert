@@ -26,7 +26,7 @@ pip install -r requirements-external.txt
 
 `requirements.txt` is meant to be used inside a [pytorch container](https://hub.docker.com/r/pytorch/pytorch/). 
 
-[flash-attention](https://github.com/Dao-AILab/flash-attention) is optional but comes already installed in the [rocm](Dockerfile-rocm) container, as it has been validate to work. NVIDIA user might also like to installed this additional dependencies for potentially better performance.
+[flash-attention](https://github.com/Dao-AILab/flash-attention) is optional but comes already installed in the [rocm](Dockerfile-rocm) container, as it has been validated to work. NVIDIA user might also like to installed this additional dependencies for potentially better performance.
 
 If you do not install flash_attention, the tool will fallback to pytorches integrated [sdpa](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) attention backend, which should work on all platforms.
 
@@ -58,15 +58,15 @@ options = {
 ```
 inside the `main()` of the script. 
 
-Using `-s True` will skip a files for which subtitle already exists. Due to the fact that naming cannot be inferred back to the tracks within a file no track will be processed even if the subtitles found only belong to one of multiple tracks in the `MKV` file.
+Using `-s True` will skip files for which subtitles already exist. Due to the fact that naming cannot be inferred back to the tracks within a file no track will be processed even if the subtitles found only belong to one of multiple tracks in the `MKV` file.
 
-The current architecture allows you to launch `N` OCR model GPU workers followed by `N` language model GPU workers. `N=4` cpu workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
+The current architecture allows you to launch `N` OCR model GPU workers followed by `N` language model GPU workers. `N=4` CPU workers each work on a single subtitle track for which `pgs images` corresponding to the amount of images found in the track are processed. Each image instance is processed one-by-one. 
 
-Each worker is launches as a separate process meaning you will need at least `N_cw + N_ow + N_lw + 2` threads available on your system. The extra `+2` are Manager with handle communication between processes via `Queues`. One manager controls the GPU queues, while the other controls the cpu and progress queues (used for progress bar). 
+Each worker is launches as a separate process meaning you will need at least `N_cw + N_ow + N_lw + 2` threads available on your system. The default is 6 threads meaning a 3 core CPU with 2 threads per core is required at the very least. The extra `+2` are Managers with handle communication between processes via `Queues`. One manager controls the GPU queues, while the other controls the CPU and progress queues (used for progress bar). 
 
-All cpu workers queue their images towards a global GPU queue. OCR GPU workers than draw items from the  first and process the image. Once processed the extracted text is passed through another queue towards the language model workers which classify the language of the text. 
+All CPU workers queue their images towards a global GPU queue. OCR GPU workers than draw items from the first queue and processes the images. Once processed the extracted text is passed through another queue towards the language model workers which classify the language of the text. 
 
-Finally the language model workers send the text with the language classification back to the cpu worker who initially processes this item, ensuring processed tracks remain consistent and ordered.
+Finally the language model workers send the text with the language classification back to the CPU worker who initially processes this item, ensuring processed tracks remain consistent and ordered.
 
 The amount of workers can be adjusted with the following arguments:
 
@@ -76,7 +76,7 @@ The amount of workers can be adjusted with the following arguments:
 -lw, --lang_workers N
 ```
 
-Additionally the `-b, --batchsize` arguments exists to batch imaged for inference, however, this options has not been tested much due to AMD GPU crashes - use with caution.
+Additionally the `-b, --batchsize` arguments exists to batch images for inference, however, this options has not been tested much due to AMD GPU crashes - use with caution.
 
 ## Shortcomings include:
 
