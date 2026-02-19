@@ -76,6 +76,8 @@ def main():
     convertibles = get_candidates(root=root, options=options)
     pgs_managers = chain.from_iterable((SubtitleTrackManager(file_path=path).get_pgs_managers(options=options) for path in convertibles))
     
+    pgs_managers = [list(pgs_managers)[0]]
+    
     
     # Setup basic options relating to pytorch and set environmental variables if needed
     options["fallback_status"] = False
@@ -86,6 +88,7 @@ def main():
             # Check for working rocm and activate flash attention, otherwise its NVIDIA
             if torch.version.hip != None:
                 os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
+                os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
 
         if torch.xpu.is_available():
             options["intel_disable_flash"] = True

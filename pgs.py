@@ -62,7 +62,7 @@ class PgsReader:
 
     @classmethod
     def decode(cls, data: bytes):
-        segments: typing.List[BaseSegment] = []
+        segments: list[BaseSegment] = []
         index = 0
         for s in cls.read_segments(data):
             segments.append(s)
@@ -75,7 +75,7 @@ class PgsReader:
 class PgsImage:
     __slots__ = ("rle_data", "palettes", "_data")
 
-    def __init__(self, data: bytes, palettes: typing.List[Palette]):
+    def __init__(self, data: bytes, palettes: list[Palette]):
         self.rle_data = data
         self.palettes = palettes
         self._data: typing.Optional[ndarray] = None
@@ -87,9 +87,9 @@ class PgsImage:
         return self._data
 
     @classmethod
-    def decode_rle_image(cls, data: bytes, palettes: typing.List[Palette], binary=True):
-        image_array: typing.List[int] = []
-        alpha_array: typing.List[int] = []
+    def decode_rle_image(cls, data: bytes, palettes: list[Palette], binary=True):
+        image_array: list[int] = []
+        alpha_array: list[int] = []
         dimension = 1 if binary else 3
         cols = 1
         i = 0
@@ -208,6 +208,39 @@ class BaseSegment:
 class PresentationCompositionSegment(BaseSegment):
     __slots__ = ()
 
+    class CompositionObject:
+
+        def __init__(self, b: bytes):
+            self.object_id = from_hex(b[0:2])
+            self.window_id = b[2]
+            self.cropped = bool(b[3])
+            self.x_offset = from_hex(b[4:6])
+            self.y_offset = from_hex(b[6:8])
+
+            self.crop_x_offset = -1
+            self.crop_y_offset = -1
+            self.crop_width    = -1
+            self.crop_height   = -1
+
+            if self.cropped:
+                self.crop_x_offset = from_hex(b[8:10])
+                self.crop_y_offset = from_hex(b[10:12])
+                self.crop_width    = from_hex(b[12:14])
+                self.crop_height   = from_hex(b[14:16])
+
+        def attributes(self):
+            return {
+                "object_id": "object_id",
+                "window_id": "window_id",
+                "cropped"  : "cropped",
+                "x_offset" : "x_offset",
+                "y_offset" : "y_offset",
+                "crop_x_offset" : "crop_x_offset",
+                "crop_y_offset" : "crop_y_offset",
+                "crop_width"    : "crop_width",
+                "crop_height"   : "crop_height"
+            }
+
     @property
     def width(self):
         return from_hex(self.data[0:2])
@@ -239,6 +272,17 @@ class PresentationCompositionSegment(BaseSegment):
     @property
     def number_composition_objects(self):
         return self.data[10]
+    
+    @property
+    def composition_objects(self):
+        b = self.data[11:]
+        comps = []
+        while b:
+            length = 8*(1 + bool(b[3]))
+            comps.append(self.CompositionObject(b[:length]))
+            b = b[length:]
+        return comps
+
 
     def attributes(self):
         return {
@@ -249,48 +293,56 @@ class PresentationCompositionSegment(BaseSegment):
             'state': 'composition_state',
             'palette_update': 'palette_update',
             'palette_id': 'palette_id',
-            'num_objects': 'number_composition_objects'
+            'num_objects': 'number_composition_objects',
+            "composition_objects": "composition_objects",
         }
 
     def is_start(self):
         return self.composition_state in (CompositionState.EPOCH_START, CompositionState.ACQUISITION_POINT)
+    
+    def is_normal(self):
+        return self.composition_state in (CompositionState.NORMAL_CASE,)
 
 
 class WindowDefinitionSegment(BaseSegment):
     __slots__ = ()
+
+    class Window:
+
+        def __init__(self, b: bytes):
+            self.window_id = safe_get(b, 0)
+            self.x_offset  = from_hex(b[1:3])
+            self.y_offset  = from_hex(b[3:5])
+            self.width     = from_hex(b[5:7])
+            self.height    = from_hex(b[7:9])
+
+        def attributes(self):
+            return {
+                "window_id": "window_id",
+                "x_offset" : "x_offset",
+                "y_offset" : "y_offset",
+                "width"    : "width",
+                "height"   : "height",
+            }
 
     @property
     def num_windows(self):
         return self.data[0]
 
     @property
-    def window_id(self):
-        return safe_get(self.data, 1)
-
-    @property
-    def x_offset(self):
-        return from_hex(self.data[2:4])
-
-    @property
-    def y_offset(self):
-        return from_hex(self.data[4:6])
-
-    @property
-    def width(self):
-        return from_hex(self.data[6:8])
-
-    @property
-    def height(self):
-        return from_hex(self.data[8:10])
+    def windows(self):
+        b = self.data[1:]
+        win = []
+        while b:
+            length = 9
+            win.append(self.Window(b[:length]))
+            b = b[length:]
+        return win
 
     def attributes(self):
         return {
             'num_windows': 'num_windows',
-            'window_id': 'window_id',
-            'x_offset': 'x_offset',
-            'y_offset': 'y_offset',
-            'width': 'width',
-            'height': 'height'
+            "windows"    : "windows",
         }
 
 
@@ -392,6 +444,8 @@ class DisplaySet:
         self.index = index
         self.segments = segments
 
+        #logger.info([segment.type for segment in segments])
+
     @property
     def pcs(self):
         return [s for s in self.segments if isinstance(s, PresentationCompositionSegment)][0]
@@ -414,6 +468,9 @@ class DisplaySet:
 
     def is_start(self):
         return self.pcs.is_start()
+    
+    def is_normal(self):
+        return self.pcs.is_normal()
 
     def to_json(self):
         return {

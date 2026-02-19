@@ -11,6 +11,6 @@ RUN pip install pymkv2 pytesseract pysrt pillow rich langcodes colorama einops t
 
 ENV FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
 RUN . /opt/venv/bin/activate
-RUN git clone https://github.com/ROCm/flash-attention.git &&\ 
+RUN git clone https://github.com/Dao-AILab/flash-attention &&\ 
     cd flash-attention &&\
     python setup.py install

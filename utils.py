@@ -18,15 +18,3 @@ def to_time(value: int):
 
 
 T = typing.TypeVar('T')
-
-
-def pairwise(iterable: typing.Iterable[T]) -> typing.Iterable[typing.Tuple[T, typing.Optional[T]]]:
-    """s -> (s0, s1), (s1, s2), (s2, s3), (s2, None)"""
-    it = iter(iterable)
-    a = next(it, None)
-    if a is not None:
-        for b in it:
-            yield a, b
-            a = b
-
-        yield a, None
