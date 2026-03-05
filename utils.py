@@ -1,5 +1,4 @@
 from pysrt import SubRipTime
-import typing
 
 
 def from_hex(b: bytes):
@@ -15,6 +14,3 @@ def safe_get(b: bytes, i: int, default_value=0):
 
 def to_time(value: int):
     return SubRipTime.from_ordinal(value)
-
-
-T = typing.TypeVar('T')
