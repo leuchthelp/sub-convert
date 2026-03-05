@@ -1,8 +1,8 @@
 from torch.multiprocessing import current_process, Queue
 from model_core import OCRModelCore, LanguageModelCore
+from pgs_manager import PgsManager, PgsSubtitleItem
 from pysrt import SubRipFile, SubRipItem
 from collections import Counter
-from pgs_manager import PgsManager
 from dataclasses import dataclass
 from langcodes import Language
 from pymkv import MKVTrack
@@ -133,7 +133,7 @@ class CPUWorker:
         return_queue = self.queues[f"{queue_index}"]
 
         logger.debug(Fore.LIGHTYELLOW_EX + f"{queue_index} got queue: {return_queue}" + Fore.RESET)
-        finished = []
+        finished: list[tuple[PgsSubtitleItem, MKVTrack, str]] = []
         for image, item, track in pgs_data: # type: ignore
             
             test_width, test_height = image.size
@@ -152,7 +152,7 @@ class CPUWorker:
 
             
 
-        savable = {"items": [], "combined": []}  
+        savable: dict[str, list[ SubRipItem | MKVTrack | list]] = {"items": [], "combined": [], "track": []}  
         for index, (item, track, text) in enumerate(finished, start=1):
             self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
             
@@ -165,7 +165,7 @@ class CPUWorker:
 
             sub_item = SubRipItem(index=index, start=item.start, end=item.end, text=text)
             
-            savable["track"] = track
+            savable["track"] = [track]
             savable["items"].append(sub_item)
 
             if self.fallback == False:
@@ -178,25 +178,25 @@ class CPUWorker:
         return True
 
 
-    def save_file(self, savable: dict[str, MKVTrack | list]):
+    def save_file(self, savable: dict[str, list[SubRipFile | MKVTrack | list]]):
         items    = savable["items"]
         srt      = SubRipFile(items=items)
 
         if "track" not in savable:
             return
         
-        combined = []
+        combined: list[list] = []
         if self.fallback == False:
-            combined = savable["combined"]
+            combined: list[list] = savable["combined"]
         
-        track    = savable["track"]
+        track: MKVTrack = savable["track"].pop()
 
-        path = Path(track.file_path).name.replace(".mkv", "") # type: ignore
+        path = Path(track.file_path).name.replace(".mkv", "")
         counter = Counter()
         average = {}
         weights = {}
 
-        for both in combined: # type: ignore
+        for both in combined:
             for label, prob in both:
                 counter.update([label])
                 if label not in average:
@@ -213,18 +213,18 @@ class CPUWorker:
 
         logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
 
-        final_lang = track.language_ietf # type: ignore
+        final_lang = track.language_ietf
         if self.fallback == False:
-            final_lang = max(average, key=average.get) # type: ignore
+            final_lang = max(average, key=average.get)
 
         logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
 
-        forced = True if track.forced_track or len(items) <= 150 else False # type: ignore
+        forced = True if track.forced_track or len(items) <= 150 else False
 
-        path = path + (".sdh" if track.flag_hearing_impaired else "") # type: ignore
+        path = path + (".sdh" if track.flag_hearing_impaired else "")
         path = path + (".forced" if forced else "")
-        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "") # type: ignore
-        potential_path = f"{Path(track.file_path).parent}/{path}.srt" # type: ignore
+        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
+        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
 
         logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
 

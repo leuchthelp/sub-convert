@@ -78,7 +78,7 @@ class PgsImage:
     def __init__(self, data: bytes, palettes: list[Palette]):
         self.rle_data = data
         self.palettes = palettes
-        self._data: typing.Optional[ndarray] = None
+        self._data: None | ndarray = None
 
     @property
     def data(self):
@@ -177,7 +177,7 @@ class BaseSegment:
             **self.attributes()
         }
 
-        def to_value(v: typing.Any):
+        def to_value(v):
             return v.name if isinstance(v, enum.Enum) else v
 
         return {
@@ -274,7 +274,7 @@ class PresentationCompositionSegment(BaseSegment):
         return self.data[10]
     
     @property
-    def composition_objects(self):
+    def composition_objects(self) -> list[CompositionObject]:
         b = self.data[11:]
         comps = []
         while b:
@@ -330,7 +330,7 @@ class WindowDefinitionSegment(BaseSegment):
         return self.data[0]
 
     @property
-    def windows(self):
+    def windows(self) -> list[Window]:
         b = self.data[1:]
         win = []
         while b:
@@ -440,7 +440,7 @@ SEGMENT_TYPE = {
 class DisplaySet:
     __slots__ = ("index", "segments")
 
-    def __init__(self, index: int, segments: typing.List[BaseSegment]):
+    def __init__(self, index: int, segments: list[BaseSegment]):
         self.index = index
         self.segments = segments
 
