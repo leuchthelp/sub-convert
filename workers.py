@@ -1,17 +1,13 @@
 from torch.multiprocessing import current_process, Queue
 from model_core import OCRModelCore, LanguageModelCore
 from pgs_manager import PgsManager, PgsSubtitleItem
-from pysrt import SubRipFile, SubRipItem
-from collections import Counter
 from dataclasses import dataclass
-from langcodes import Language
-from pymkv import MKVTrack
 from copy import deepcopy
 from colorama import Fore
 from pathlib import Path
 import pytesseract as tess
-import numpy as np
 import logging
+import typing
 
 
 logger = logging.getLogger(__name__)
@@ -120,27 +116,24 @@ class CPUWorker:
 
 
     def run(self, pgs_manager: PgsManager) -> bool:
-        
         pgs_data = pgs_manager.get_pgs_images()
         if not pgs_data:
             return False
 
         logger.debug(Fore.MAGENTA + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}" + Fore.RESET)
-        
         self.task_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}", len(pgs_data)))
 
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
 
         logger.debug(Fore.LIGHTYELLOW_EX + f"{queue_index} got queue: {return_queue}" + Fore.RESET)
-        finished: list[tuple[PgsSubtitleItem, MKVTrack, str]] = []
-        for image, item, track in pgs_data: # type: ignore
+        finished: list[tuple[PgsSubtitleItem, str]] = []
+        for image, item in pgs_data:
             
             test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
                 continue
 
-            
             image = image.convert("RGB")
             text = ""
             if self.fallback == False:
@@ -148,95 +141,23 @@ class CPUWorker:
             else: 
                 text = tess.image_to_string(image=image)
             
-            finished.append((item, track, text))
+            finished.append((item, text))
 
             
-
-        savable: dict[str, list[ SubRipItem | MKVTrack | list]] = {"items": [], "combined": [], "track": []}  
-        for index, (item, track, text) in enumerate(finished, start=1):
+        for item, text in finished:
             self.progress_queue.put_nowait((f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"))
             
-            combined = []
+            combined: list[tuple[str, typing.Any]] = []
             if self.fallback == False:
                 text, combined = return_queue.get()
 
             if not text:
                 continue
 
-            sub_item = SubRipItem(index=index, start=item.start, end=item.end, text=text)
+            item.text = text
+            item.lang_estimate = combined
             
-            savable["track"] = [track]
-            savable["items"].append(sub_item)
-
-            if self.fallback == False:
-                savable["combined"].append(combined)
-            
-        
         logger.debug(Fore.GREEN + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!" + Fore.RESET)
-        
-        self.save_file(savable=savable) # type: ignore
+        pgs_manager.save_file() 
         return True
-
-
-    def save_file(self, savable: dict[str, list[SubRipFile | MKVTrack | list]]):
-        items    = savable["items"]
-        srt      = SubRipFile(items=items)
-
-        if "track" not in savable:
-            return
-        
-        combined: list[list] = []
-        if self.fallback == False:
-            combined: list[list] = savable["combined"]
-        
-        track: MKVTrack = savable["track"].pop()
-
-        path = Path(track.file_path).name.replace(".mkv", "")
-        counter = Counter()
-        average = {}
-        weights = {}
-
-        for both in combined:
-            for label, prob in both:
-                counter.update([label])
-                if label not in average:
-                    average[label] = [prob]
-                else:
-                    average[label].append(prob)
-
-        logger.debug(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
-
-        for label, count in counter.items():
-            weights[label] = count / counter.total()
-        for label, prob in average.items():
-            average[label] = np.average(prob) * weights[label]
-
-        logger.debug(Fore.CYAN + f"{counter}, probablities {average}, weights: {weights}" + Fore.RESET)
-
-        final_lang = track.language_ietf
-        if self.fallback == False:
-            final_lang = max(average, key=average.get)
-
-        logger.debug(Fore.MAGENTA + f"picked language: {final_lang}, averages: {average}" + Fore.RESET)
-
-        forced = True if track.forced_track or len(items) <= 150 else False
-
-        path = path + (".sdh" if track.flag_hearing_impaired else "")
-        path = path + (".forced" if forced else "")
-        path = path + "." + (track.language if track.language_ietf == final_lang else Language.get(final_lang).to_alpha3() if track.language != None else "")
-        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
-
-        logger.debug(f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}")
-
-        logger.debug(f"{self.override_if_exists == True} and {Path(potential_path)} exists: {Path(potential_path).exists()}")
-        if self.override_if_exists == True and Path(potential_path).exists():
-            Path(potential_path).unlink()
-        else:
-            unique = 0
-            while Path(potential_path).exists():
-                unique += 1
-                potential_path = potential_path.replace(f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}")
-                potential_path = potential_path.replace(f"-{unique-1}", "",)
-            
-        srt.save(path=potential_path)
 

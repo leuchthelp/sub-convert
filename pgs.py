@@ -81,13 +81,13 @@ class PgsImage:
         self._data: None | ndarray = None
 
     @property
-    def data(self):
+    def data(self) -> ndarray:
         if self._data is None:
             self._data = self.decode_rle_image(self.rle_data, self.palettes)
         return self._data
 
     @classmethod
-    def decode_rle_image(cls, data: bytes, palettes: list[Palette], binary=True):
+    def decode_rle_image(cls, data: bytes, palettes: list[Palette], binary=True) -> ndarray:
         image_array: list[int] = []
         alpha_array: list[int] = []
         dimension = 1 if binary else 3
@@ -114,9 +114,14 @@ class PgsImage:
         if binary:
             return img
 
+        # Placeholder for colored images
+        return np.zeros(5)
+
+
     @classmethod
     def get_color(cls, palette: Palette, binary: bool):
         return ([0] if palette[0] > 127 else [255]) if binary else palette[:3]
+
 
     @classmethod
     def decode_rle_position(cls, data: bytes, i: int):
@@ -136,6 +141,7 @@ class PgsImage:
 
         fourth = safe_get(data, i + 3)
         return ((second - 192) << 8) + third, fourth, 4
+
 
     @property
     def shape(self):

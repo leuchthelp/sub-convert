@@ -1,13 +1,13 @@
-from __future__ import annotations
 from pgs import PgsImage, ObjectDefinitionSegment, Palette, PresentationCompositionSegment
 import logging
+import typing
 
 
 logger = logging.getLogger(__name__)
 
 
 class PgsSubtitleItem:
-    __slots__ = ("image", "x_offset", "y_offset", "text", "display_set")
+    __slots__ = ("image", "x_offset", "y_offset", "text", "display_set", "lang_estimate")
 
     def __init__(self,
                  ods: list[ObjectDefinitionSegment],
@@ -18,6 +18,7 @@ class PgsSubtitleItem:
         self.x_offset = comp_obj.x_offset
         self.y_offset = comp_obj.y_offset
         self.text: str = ""
+        self.lang_estimate: list[tuple[str, typing.Any]] = []
 
 
     def __generate_pgs_image(self, ods: list[ObjectDefinitionSegment], palettes: list[Palette]) -> PgsImage:

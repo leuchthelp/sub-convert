@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from colorama import Fore
 import logging
+import typing
 import os 
 
 #os.environ['TRANSFORMERS_OFFLINE'] = '1' 
@@ -96,7 +97,7 @@ class LanguageModelCore(ModelCore):
     def __init__(
         self,
         model_name="Mike0307/multilingual-e5-language-detection",
-        languages=static_languages,
+        languages: list[str] = static_languages,
         options={}
     ):  
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
@@ -129,7 +130,7 @@ class LanguageModelCore(ModelCore):
         return probabilities
     
 
-    def get_topk(self, text: str, k=3) -> list:
+    def get_topk(self, text: str, k=3) -> list[tuple[str, typing.Any]]:
         
         probabilities = self.__predict(text=text)
         topk_prob, topk_indices = torch.topk(probabilities, k)
@@ -137,7 +138,7 @@ class LanguageModelCore(ModelCore):
         topk_prob = topk_prob.cpu().numpy()[0].tolist()
         topk_indices = topk_indices.cpu().numpy()[0].tolist()
 
-        topk_labels = [self.languages[index] for index in topk_indices]
+        topk_labels: list[str] = [self.languages[index] for index in topk_indices]
 
         logger.debug(Fore.MAGENTA + f"top probilities: {topk_prob}, top labels: {topk_labels}" + Fore.RESET)
 
