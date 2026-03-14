@@ -1,6 +1,5 @@
 from __future__ import annotations
 from pgs import PgsImage, ObjectDefinitionSegment, Palette, PresentationCompositionSegment
-from PIL import Image
 import logging
 
 
@@ -15,13 +14,13 @@ class PgsSubtitleItem:
                  comp_obj: PresentationCompositionSegment.CompositionObject,
                  palette: list[Palette]
                  ):
-        self.image = self.__generate_image(ods, palette)
+        self.image = self.__generate_pgs_image(ods, palette)
         self.x_offset = comp_obj.x_offset
         self.y_offset = comp_obj.y_offset
         self.text: str = ""
 
 
-    def __generate_image(self, ods: ObjectDefinitionSegment, palettes: list[Palette]) -> PgsImage:
+    def __generate_pgs_image(self, ods: ObjectDefinitionSegment, palettes: list[Palette]) -> PgsImage:
         return PgsImage(ods.img_data, palettes)
 
     @property

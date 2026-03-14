@@ -2,6 +2,7 @@ from media import PgsSubtitleItem, Palette
 from pgs import PgsReader, DisplaySet
 from dataclasses import dataclass
 from pysrt import SubRipTime
+from copy import deepcopy
 from colorama import Fore
 import logging
 import typing
@@ -23,7 +24,8 @@ class Timeline:
         
         self.window_id = window_id
         self.start = start
-        self.end   = start
+        self.end   = start # will be overwridden by the following Timeline item
+        self.position =  "Bottom"
 
         self.ds    = ds
         self.comp_obj = [comp_obj for comp_obj in ds.pcs.composition_objects if comp_obj.window_id == window_id].pop()
@@ -32,13 +34,15 @@ class Timeline:
         self.display_obj = None if not display_obj_cand else display_obj_cand.pop()
         self.palette = None if not ds.pds_segments else ds.pds_segments.pop().palettes
         self.index = index
+        self.pgs_subtitle_item: PgsSubtitleItem 
 
-    
-    @property
-    def pgs_subtitle_item(self) -> PgsSubtitleItem:
+
+    def gen_pgs_subtitle_item(self) -> PgsSubtitleItem:
         if self.display_obj is None or self.palette is None:
             raise ValueError
-        return PgsSubtitleItem(ods=self.display_obj, comp_obj=self.comp_obj, palette=self.palette)
+        
+        self.pgs_subtitle_item = PgsSubtitleItem(ods=self.display_obj, comp_obj=self.comp_obj, palette=self.palette)
+        return self.pgs_subtitle_item
 
 
     def __repr__(self):
@@ -57,29 +61,30 @@ class SubtitleGroup:
     def __init__(self,
                  members: list[DisplaySet],
                  ):
-
-
         overlap = self.__find_overlap(members=members)
 
+        end = members[-1]
         global_palettes: dict[int, list[Palette]] = {}
-        reset_positions: list[int] = []
-        redef_positions: list[int] = []
-        overlapping: dict[str, list[DisplaySet]] = {}
-        
-        self.timelines: list[dict[int, list[Timeline]]] = []
+        timelines: list[dict[int, list[Timeline]]] = []
+
         if overlap:
             global_palettes = self.__find_global_palettes(members=members)
-            reset_positions = self.__find_reset_positions(members=members)
             redef_positions = self.__find_redefintion_positions(members=members)
+            reset_positions = self.__find_reset_positions(members=members)
             overlapping     = self.__find_overlapping(reset_positions=reset_positions, redef_positions=redef_positions, members=members)
 
-            [self.timelines.append(self.__gen_timelines(members=segment, global_palettes=global_palettes)) for _, segment in overlapping.items()]
-        else:
-            self.timelines.append(self.__gen_timelines(members=members))
-        
-        self.pgs_subtitle_items = self.__generate_pgs_subtitles(members=members, overlap=overlap, global_palettes=global_palettes, overlapping=overlapping)
+            tmp = [self.__gen_timelines(members=segment, global_palettes=global_palettes) for _, segment in overlapping.items()]
+            reset_statements = [members[index] for index in reset_positions]
+            redef_statements = [members[index] for index in redef_positions]
 
+            for index, fixables in enumerate(tmp):
+                actual_end = redef_statements[index + 1] if index == 0 else end
+                timelines.append(self.__fix_endpoints(fixables=fixables, reset_statements=reset_statements[index], end=actual_end))
+        else:
+            tmp = self.__gen_timelines(members=members)
+            timelines.append(self.__fix_endpoints(fixables=tmp, reset_statements=end, end=end))
         
+        self.pgs_subtitle_items = self.__gen_pgs_subtitle_items(timelines=timelines)    
 
 
     def __find_overlap(self, members: list[DisplaySet]) -> bool:
@@ -163,13 +168,14 @@ class SubtitleGroup:
 
                             prev_timeline.end = new_timeline.start
 
-                            if not new_timeline.palette:
-                                new_timeline.palette = prev_timeline.palette
+                            if new_timeline.comp_obj.object_id != prev_timeline.comp_obj.object_id:
+                                if not new_timeline.palette:
+                                    new_timeline.palette = prev_timeline.palette
 
-                            if not new_timeline.display_obj:
-                                new_timeline.display_obj = prev_timeline.display_obj
+                                if not new_timeline.display_obj:
+                                    new_timeline.display_obj = prev_timeline.display_obj
 
-                            timelines[comp_obj.window_id].append(new_timeline) 
+                                timelines[comp_obj.window_id].append(new_timeline) 
                         else:
                             new_timeline = Timeline(window_id=window.window_id, start=ds.pcs.presentation_timestamp, ds=ds) 
 
@@ -178,12 +184,29 @@ class SubtitleGroup:
                             
                             timelines[window.window_id] = [new_timeline] 
 
-        [timeline.pop() for _, timeline in timelines.items()]
-        return timelines
         
+        return timelines
 
-    def __generate_pgs_subtitles(self, overlap: bool, members: list[DisplaySet], global_palettes: dict[int, list[Palette]], overlapping: dict[str, list[DisplaySet]]) -> list[PgsSubtitleItem]:
+
+    def __fix_endpoints(self, fixables: dict[int, list[Timeline]], reset_statements: DisplaySet, end: DisplaySet) -> dict[int, list[Timeline]]:
+        for _, items in fixables.items():
+            fixable = items[-1]
+            
+            if reset_statements.pcs.composition_objects and fixable.comp_obj.object_id != reset_statements.pcs.composition_objects[0].object_id:
+                    fixable.end = reset_statements.pcs.presentation_timestamp
+            else:
+                fixable.end = end.pcs.presentation_timestamp
+
+        return fixables
+
+
+    def __gen_pgs_subtitle_items(self, timelines: list[dict[int, list[Timeline]]]) -> list[PgsSubtitleItem]:
         items: list[PgsSubtitleItem] = []
+
+        for timeline in timelines:
+            for _, entries in timeline.items():
+                for element in entries:
+                    items.append(element.gen_pgs_subtitle_item())
         return items
     
 
@@ -197,6 +220,7 @@ class Pgs:
         self.data_reader = data_reader
         self.temp_folder = temp_folder
         self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
+
 
     @property
     def items(self) -> list[PgsSubtitleItem] | None:
@@ -222,11 +246,12 @@ class Pgs:
                 tmp = []
 
         
-        test_groups = list(range(100, 111+1))
+        test_groups = list(range(100, 112))
         sliced      = [ds for group in groups for ds in group if ds.index in test_groups]
         subtitle_groups = SubtitleGroup(members=sliced)
 
-        return []
+        return subtitle_groups.pgs_subtitle_items
+
 
     def dump_display_sets(self, display_sets: typing.List[DisplaySet]):
         new_line = '\n'
@@ -236,8 +261,10 @@ class Pgs:
             json.dump([ds.to_json() for ds in display_sets], f,
                       indent=2, ensure_ascii=False, default=lambda x: str(x))
 
+
     def __repr__(self):
         return f'<{self.__class__.__name__} [{self}]>'
+
 
     def __enter__(self):
         return self

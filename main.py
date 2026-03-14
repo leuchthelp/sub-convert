@@ -88,7 +88,7 @@ def main():
             # Check for working rocm and activate flash attention, otherwise its NVIDIA
             if torch.version.hip != None:
                 os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
-                os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
+                #os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
 
         if torch.xpu.is_available():
             options["intel_disable_flash"] = True
