@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class PgsSubtitleItem:
-    __slots__ = ("image", "x_offset", "y_offset", "text", "place", "display_set")
+    __slots__ = ("image", "x_offset", "y_offset", "text", "display_set")
 
     def __init__(self,
-                 ods: ObjectDefinitionSegment,
+                 ods: list[ObjectDefinitionSegment],
                  comp_obj: PresentationCompositionSegment.CompositionObject,
                  palette: list[Palette]
                  ):
@@ -20,21 +20,28 @@ class PgsSubtitleItem:
         self.text: str = ""
 
 
-    def __generate_pgs_image(self, ods: ObjectDefinitionSegment, palettes: list[Palette]) -> PgsImage:
-        return PgsImage(ods.img_data, palettes)
+    def __generate_pgs_image(self, ods: list[ObjectDefinitionSegment], palettes: list[Palette]) -> PgsImage:
+        tmp = b""
+        for entry in ods:
+            tmp += entry.img_data
+        return PgsImage(data=tmp, palettes=palettes)
+
 
     @property
     def height(self):
         return self.image.shape[0]
 
+
     @property
     def width(self):
         return self.image.shape[1]
+
 
     @property
     def h_center(self):
         shape = self.shape
         return shape[0] + (shape[2] - shape[0]) // 2
+
 
     @property
     def shape(self):
