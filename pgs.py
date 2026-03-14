@@ -403,6 +403,7 @@ class ObjectDefinitionSegment(BaseSegment):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[9:11])
 
+
     @property
     def img_data(self):
         if self.sequence_type == ObjectSequenceType.LAST:
