@@ -10,25 +10,25 @@ logger = logging.getLogger(__name__)
 
 @enum.unique
 class SegmentType(enum.Enum):
-    PDS = int('0x14', 16)
-    ODS = int('0x15', 16)
-    PCS = int('0x16', 16)
-    WDS = int('0x17', 16)
-    END = int('0x80', 16)
+    PDS = int("0x14", 16)
+    ODS = int("0x15", 16)
+    PCS = int("0x16", 16)
+    WDS = int("0x17", 16)
+    END = int("0x80", 16)
 
 
 @enum.unique
 class CompositionState(enum.Enum):
-    NORMAL_CASE = from_hex(b'\x00')
-    ACQUISITION_POINT = from_hex(b'\x40')
-    EPOCH_START = from_hex(b'\x80')
+    NORMAL_CASE = from_hex(b"\x00")
+    ACQUISITION_POINT = from_hex(b"\x40")
+    EPOCH_START = from_hex(b"\x80")
 
 
 @enum.unique
 class ObjectSequenceType(enum.Enum):
-    LAST = from_hex(b'\x40')
-    FIRST = from_hex(b'\x80')
-    FIRST_AND_LAST = from_hex(b'\xc0')
+    LAST = from_hex(b"\x40")
+    FIRST = from_hex(b"\x80")
+    FIRST_AND_LAST = from_hex(b"\xc0")
 
 
 class Palette(typing.NamedTuple):
@@ -46,12 +46,14 @@ class PgsReader:
         count = 0
         b = data
         while b:
-            if b[:2] != b'PG':
-                logger.warning('Ignoring invalid PGS segment data: %s', b)
+            if b[:2] != b"PG":
+                logger.warning("Ignoring invalid PGS segment data: %s", b)
                 break
 
             if len(b) < 13:
-                logger.warning('Ignoring invalid PGS segment data with less than 13 bytes: %s', b)
+                logger.warning(
+                    "Ignoring invalid PGS segment data with less than 13 bytes: %s", b
+                )
                 break
 
             segment_type = SEGMENT_TYPE[SegmentType(b[10])]
@@ -87,7 +89,9 @@ class PgsImage:
         return self._data
 
     @classmethod
-    def decode_rle_image(cls, data: bytes, palettes: list[Palette], binary=True) -> ndarray:
+    def decode_rle_image(
+        cls, data: bytes, palettes: list[Palette], binary=True
+    ) -> ndarray:
         image_array: list[int] = []
         alpha_array: list[int] = []
         dimension = 1 if binary else 3
@@ -110,18 +114,18 @@ class PgsImage:
             delta = cols * rows * dimension - len(image_array)
             image_array.extend((cls.get_color(palettes[0], binary) * dimension) * delta)
 
-        img = np.array(image_array, dtype=np.uint8).reshape((rows, cols) if binary else (rows, cols, dimension))
+        img = np.array(image_array, dtype=np.uint8).reshape(
+            (rows, cols) if binary else (rows, cols, dimension)
+        )
         if binary:
             return img
 
         # Placeholder for colored images
         return np.zeros(5)
 
-
     @classmethod
     def get_color(cls, palette: Palette, binary: bool):
         return ([0] if palette[0] > 127 else [255]) if binary else palette[:3]
-
 
     @classmethod
     def decode_rle_position(cls, data: bytes, i: int):
@@ -142,14 +146,13 @@ class PgsImage:
         fourth = safe_get(data, i + 3)
         return ((second - 192) << 8) + third, fourth, 4
 
-
     @property
     def shape(self):
         return self.data.shape
 
 
 class BaseSegment:
-    __slots__ = ("raw")
+    __slots__ = "raw"
 
     def __init__(self, b: bytes):
         self.raw = b
@@ -176,18 +179,20 @@ class BaseSegment:
 
     def to_json(self):
         attributes = {
-            'type': 'type',
-            'pts': 'presentation_timestamp',
-            'dts': 'decoding_timestamp',
-            'size': 'size',
-            **self.attributes()
+            "type": "type",
+            "pts": "presentation_timestamp",
+            "dts": "decoding_timestamp",
+            "size": "size",
+            **self.attributes(),
         }
 
         def to_value(v):
             return v.name if isinstance(v, enum.Enum) else v
 
         return {
-            k: to_value(getattr(self, v)) for k, v in attributes.items() if getattr(self, v) is not None
+            k: to_value(getattr(self, v))
+            for k, v in attributes.items()
+            if getattr(self, v) is not None
         }
 
     def attributes(self):
@@ -203,19 +208,18 @@ class BaseSegment:
         strings = []
         for k, v in self.to_json().items():
             if v is not None:
-                strings.append(f'{k}={v}')
+                strings.append(f"{k}={v}")
 
-        return ', '.join(strings)
+        return ", ".join(strings)
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}: [{self}]>'
+        return f"<{self.__class__.__name__}: [{self}]>"
 
 
 class PresentationCompositionSegment(BaseSegment):
     __slots__ = ()
 
     class CompositionObject:
-
         def __init__(self, b: bytes):
             self.object_id = from_hex(b[0:2])
             self.window_id = b[2]
@@ -225,26 +229,26 @@ class PresentationCompositionSegment(BaseSegment):
 
             self.crop_x_offset = -1
             self.crop_y_offset = -1
-            self.crop_width    = -1
-            self.crop_height   = -1
+            self.crop_width = -1
+            self.crop_height = -1
 
             if self.cropped:
                 self.crop_x_offset = from_hex(b[8:10])
                 self.crop_y_offset = from_hex(b[10:12])
-                self.crop_width    = from_hex(b[12:14])
-                self.crop_height   = from_hex(b[14:16])
+                self.crop_width = from_hex(b[12:14])
+                self.crop_height = from_hex(b[14:16])
 
         def attributes(self):
             return {
                 "object_id": "object_id",
                 "window_id": "window_id",
-                "cropped"  : "cropped",
-                "x_offset" : "x_offset",
-                "y_offset" : "y_offset",
-                "crop_x_offset" : "crop_x_offset",
-                "crop_y_offset" : "crop_y_offset",
-                "crop_width"    : "crop_width",
-                "crop_height"   : "crop_height"
+                "cropped": "cropped",
+                "x_offset": "x_offset",
+                "y_offset": "y_offset",
+                "crop_x_offset": "crop_x_offset",
+                "crop_y_offset": "crop_y_offset",
+                "crop_width": "crop_width",
+                "crop_height": "crop_height",
             }
 
     @property
@@ -278,34 +282,36 @@ class PresentationCompositionSegment(BaseSegment):
     @property
     def number_composition_objects(self):
         return self.data[10]
-    
+
     @property
     def composition_objects(self) -> list[CompositionObject]:
         b = self.data[11:]
         comps = []
         while b:
-            length = 8*(1 + bool(b[3]))
+            length = 8 * (1 + bool(b[3]))
             comps.append(self.CompositionObject(b[:length]))
             b = b[length:]
         return comps
 
-
     def attributes(self):
         return {
-            'width': 'width',
-            'height': 'height',
-            'frame_rate': 'frame_rate',
-            'number': 'composition_number',
-            'state': 'composition_state',
-            'palette_update': 'palette_update',
-            'palette_id': 'palette_id',
-            'num_objects': 'number_composition_objects',
+            "width": "width",
+            "height": "height",
+            "frame_rate": "frame_rate",
+            "number": "composition_number",
+            "state": "composition_state",
+            "palette_update": "palette_update",
+            "palette_id": "palette_id",
+            "num_objects": "number_composition_objects",
             "composition_objects": "composition_objects",
         }
 
     def is_start(self):
-        return self.composition_state in (CompositionState.EPOCH_START, CompositionState.ACQUISITION_POINT)
-    
+        return self.composition_state in (
+            CompositionState.EPOCH_START,
+            CompositionState.ACQUISITION_POINT,
+        )
+
     def is_normal(self):
         return self.composition_state in (CompositionState.NORMAL_CASE,)
 
@@ -314,21 +320,20 @@ class WindowDefinitionSegment(BaseSegment):
     __slots__ = ()
 
     class Window:
-
         def __init__(self, b: bytes):
             self.window_id = safe_get(b, 0)
-            self.x_offset  = from_hex(b[1:3])
-            self.y_offset  = from_hex(b[3:5])
-            self.width     = from_hex(b[5:7])
-            self.height    = from_hex(b[7:9])
+            self.x_offset = from_hex(b[1:3])
+            self.y_offset = from_hex(b[3:5])
+            self.width = from_hex(b[5:7])
+            self.height = from_hex(b[7:9])
 
         def attributes(self):
             return {
                 "window_id": "window_id",
-                "x_offset" : "x_offset",
-                "y_offset" : "y_offset",
-                "width"    : "width",
-                "height"   : "height",
+                "x_offset": "x_offset",
+                "y_offset": "y_offset",
+                "width": "width",
+                "height": "height",
             }
 
     @property
@@ -347,13 +352,13 @@ class WindowDefinitionSegment(BaseSegment):
 
     def attributes(self):
         return {
-            'num_windows': 'num_windows',
-            "windows"    : "windows",
+            "num_windows": "num_windows",
+            "windows": "windows",
         }
 
 
 class PaletteDefinitionSegment(BaseSegment):
-    __slots__ = ("palettes")
+    __slots__ = "palettes"
 
     def __init__(self, b: bytes):
         super().__init__(b)
@@ -362,7 +367,7 @@ class PaletteDefinitionSegment(BaseSegment):
         # Iterate entries. Explode the 5 bytes into namedtuple Palette. Must be exploded
         for entry in range(len(self.data[2:]) // 5):
             i = 2 + entry * 5
-            self.palettes[self.data[i]] = Palette(*self.data[i + 1:i + 5])
+            self.palettes[self.data[i]] = Palette(*self.data[i + 1 : i + 5])
 
     @property
     def palette_id(self):
@@ -373,10 +378,7 @@ class PaletteDefinitionSegment(BaseSegment):
         return self.data[1]
 
     def attributes(self):
-        return {
-            'palette_id': 'palette_id',
-            'version': 'version'
-        }
+        return {"palette_id": "palette_id", "version": "version"}
 
 
 class ObjectDefinitionSegment(BaseSegment):
@@ -409,7 +411,6 @@ class ObjectDefinitionSegment(BaseSegment):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[9:11])
 
-
     @property
     def img_data(self):
         if self.sequence_type == ObjectSequenceType.LAST:
@@ -419,12 +420,12 @@ class ObjectDefinitionSegment(BaseSegment):
 
     def attributes(self):
         return {
-            'id': 'id',
-            'version': 'version',
-            'sequence_type': 'sequence_type',
-            'data_len': 'data_len',
-            'width': 'width',
-            'height': 'height'
+            "id": "id",
+            "version": "version",
+            "sequence_type": "sequence_type",
+            "data_len": "data_len",
+            "width": "width",
+            "height": "height",
         }
 
 
@@ -440,7 +441,7 @@ SEGMENT_TYPE = {
     SegmentType.ODS: ObjectDefinitionSegment,
     SegmentType.PCS: PresentationCompositionSegment,
     SegmentType.WDS: WindowDefinitionSegment,
-    SegmentType.END: EndSegment
+    SegmentType.END: EndSegment,
 }
 
 
@@ -451,11 +452,11 @@ class DisplaySet:
         self.index = index
         self.segments = segments
 
-        #logger.info([segment.type for segment in segments])
-
     @property
     def pcs(self):
-        return [s for s in self.segments if isinstance(s, PresentationCompositionSegment)][0]
+        return [
+            s for s in self.segments if isinstance(s, PresentationCompositionSegment)
+        ][0]
 
     @property
     def wds(self):
@@ -475,22 +476,19 @@ class DisplaySet:
 
     def is_start(self):
         return self.pcs.is_start()
-    
+
     def is_normal(self):
         return self.pcs.is_normal()
 
     def to_json(self):
-        return {
-            'index': self.index,
-            'segments': [s.to_json() for s in self.segments]
-        }
+        return {"index": self.index, "segments": [s.to_json() for s in self.segments]}
 
     def __str__(self):
-        strings = [f'DS[{self.index}]']
+        strings = [f"DS[{self.index}]"]
         for s in self.segments:
-            strings.append(f'\t{s}')
+            strings.append(f"\t{s}")
 
-        return '\n'.join(strings)
+        return "\n".join(strings)
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}: {self}]>'
+        return f"<{self.__class__.__name__}: {self}]>"
