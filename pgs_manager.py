@@ -1,4 +1,4 @@
-from subtitle_group import SubtitleGroup, Timeline
+from subtitle_group import SubtitleGroup, TimelineItem
 from pysrt import SubRipFile, SubRipItem, SubRipTime
 from media import PgsSubtitleItem
 from dataclasses import dataclass
@@ -10,6 +10,7 @@ from pymkv import MKVTrack
 from colorama import Fore
 from pathlib import Path
 from PIL import Image
+from dateutil import parser
 import plotly.express as px
 import plotly.io as pio
 import pandas as pd
@@ -22,6 +23,12 @@ import shutil
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def min_max(lo, hi):
+    if hi < lo:
+        lo, hi = hi, lo
+    return lo, hi
 
 
 @dataclass
@@ -70,20 +77,20 @@ class PgsManager:
         df = pd.DataFrame()
 
         for group in subtitle_groups:
-            for entries in group.timelines:
-                for timeline in list(chain.from_iterable(entries.values())):
+            for timeline in group.timelines:
+                for item in list(chain.from_iterable(timeline.values())):
                     tmp = pd.DataFrame(
                         data={
-                            "start": [str(timeline.start)],
-                            "end": [str(timeline.end)],
-                            "placement": [timeline.position],
-                            "text": [timeline.text],
+                            "start": [parser.parse(str(item.start))],
+                            "end": [parser.parse(str(item.end))],
+                            "placement": [item.position],
+                            "text": [item.text],
                         },
                     )
 
                     df = pd.concat([df, tmp], ignore_index=True)
-        
-        pio.get_chrome()
+
+        # pio.get_chrome()
         fig = px.timeline(
             data_frame=df,
             x_start="start",
@@ -105,17 +112,65 @@ class PgsManager:
     def __gen_srt_items(self, subtitle_groups: list[SubtitleGroup]) -> list[SubRipItem]:
         index = 0
         subtitle_items: list[SubRipItem] = []
-        for group in subtitle_groups:
-            for entries in group.timelines:
-                for timeline in list(chain.from_iterable(entries.values())):
-                    text = timeline.text
-                    start = timeline.start
-                    end = timeline.end
+        intermediate: list[TimelineItem] = []
 
-                    subtitle_items.append(
-                        SubRipItem(index=index, start=start, end=end, text=text)
-                    )
-                    index += 1
+        for group in subtitle_groups:
+            for timeline in group.timelines:
+                if group.overlap:
+                    bottom_items = timeline["Bottom"]
+                    top_items = timeline["Top"]
+
+                    for item in bottom_items:
+                        overlapping_with = item.associated_timestamp
+
+                        for entry in top_items:
+                            if entry.start in overlapping_with and entry.end in overlapping_with:
+                                start = max(item.start, entry.start)
+                                end = min(item.end, entry.end)
+                                new_tlitem = TimelineItem(start=start, end=end)
+
+                                bottom_text: str
+                                top_text: str
+
+                                if item.position == "Bottom":
+                                    bottom_text = item.text
+                                    top_text = entry.text
+                                else:
+                                    bottom_text = entry.text
+                                    top_text = item.text
+
+                                new_tlitem.set_text(top_text + "\n" + bottom_text)
+                                intermediate.append(new_tlitem)
+
+                                overlapping_with.remove(entry.start)
+
+                            elif entry.end in overlapping_with and entry.start not in overlapping_with and item.start != entry.end:
+                                if item.start != entry.start:
+                                    start, end = min_max(item.start, entry.start)
+                                    new_tlitem = TimelineItem(start=start, end=end)
+                                    new_tlitem.set_text(
+                                        item.text if start == item.start else entry.text
+                                    )
+                                    intermediate.append(new_tlitem)
+                                    overlapping_with.remove(entry.end)
+
+                            elif entry.start in overlapping_with and entry.end not in overlapping_with and item.end != entry.start:
+                                if item.end != entry.end:
+                                    start, end = min_max(item.end, entry.end)
+                                    new_tlitem = TimelineItem(start=start, end=end)
+                                    new_tlitem.set_text(
+                                        item.text if start == item.end else entry.text
+                                    )
+                                    intermediate.append(new_tlitem)
+                                    overlapping_with.remove(entry.start)
+                            else:
+                                intermediate.append(entry)
+
+                else:
+                    [
+                        intermediate.append(item)
+                        for item in list(chain.from_iterable(timeline.values()))
+                    ]
 
         return subtitle_items
 
@@ -140,7 +195,7 @@ class PgsManager:
         srt = SubRipFile(items=items)
 
         combined: list[list] = []
-        #if not self.fallback:
+        # if not self.fallback:
         #    combined: list[list] = savable["combined"]
 
         track = self.mkv_track
@@ -198,12 +253,12 @@ class PgsManager:
             f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}"
         )
 
-        #logger.debug(
+        # logger.debug(
         #    f"{self.override_if_exists} and {Path(potential_path)} exists: {Path(potential_path).exists()}"
-        #)
-        #if self.override_if_exists and Path(potential_path).exists():
+        # )
+        # if self.override_if_exists and Path(potential_path).exists():
         #    Path(potential_path).unlink()
-        #else:
+        # else:
         #    unique = 0
         #    while Path(potential_path).exists():
         #        unique += 1

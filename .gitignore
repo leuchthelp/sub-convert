@@ -16,6 +16,8 @@ wheels/
 *.whl
 *.png
 *.txt
+*.json
+*.svg
 
 images
 tmp
