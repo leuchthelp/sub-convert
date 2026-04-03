@@ -20,7 +20,8 @@ import os
 
 
 logging.basicConfig(
-    level=logging.CRITICAL, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.CRITICAL,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -224,7 +225,7 @@ def main():
                 target=LangaugeGPUWorker(core=lang_core, queues=queues).run,
                 args=(gpu_lang_batchsize,),
             )
-        ) 
+        )
     del lang_core
 
     processes = gpu_ocr_processes + gpu_lang_processes
