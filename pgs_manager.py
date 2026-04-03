@@ -11,6 +11,7 @@ from colorama import Fore
 from pathlib import Path
 from PIL import Image
 import plotly.express as px
+import plotly.io as pio
 import pandas as pd
 import numpy as np
 import subprocess
@@ -20,6 +21,7 @@ import shutil
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -80,7 +82,8 @@ class PgsManager:
                     )
 
                     df = pd.concat([df, tmp], ignore_index=True)
-
+        
+        pio.get_chrome()
         fig = px.timeline(
             data_frame=df,
             x_start="start",
@@ -91,9 +94,13 @@ class PgsManager:
             color="placement",
         )
 
-        Path("debug").mkdir(parents=True, exist_ok=True)
-        df.to_json(f"image-test/{self.hash}.json")
-        fig.write_image(f"image-test/quickview-{self.hash}.svg")
+        debug_path = Path("debug")
+        debug_path.mkdir(parents=True, exist_ok=True)
+
+        path = Path(f"{debug_path}/{self.hash[0:6]}")
+        path.mkdir(parents=True, exist_ok=True)
+        df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
+        fig.write_image(f"{path.absolute()}/quickview-{self.hash[0:6]}.svg")
 
     def __gen_srt_items(self, subtitle_groups: list[SubtitleGroup]) -> list[SubRipItem]:
         index = 0
@@ -133,8 +140,8 @@ class PgsManager:
         srt = SubRipFile(items=items)
 
         combined: list[list] = []
-        if not self.fallback:
-            combined: list[list] = savable["combined"]
+        #if not self.fallback:
+        #    combined: list[list] = savable["combined"]
 
         track = self.mkv_track
 
@@ -191,21 +198,21 @@ class PgsManager:
             f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}"
         )
 
-        logger.debug(
-            f"{self.override_if_exists} and {Path(potential_path)} exists: {Path(potential_path).exists()}"
-        )
-        if self.override_if_exists and Path(potential_path).exists():
-            Path(potential_path).unlink()
-        else:
-            unique = 0
-            while Path(potential_path).exists():
-                unique += 1
-                potential_path = potential_path.replace(
-                    f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}"
-                )
-                potential_path = potential_path.replace(
-                    f"-{unique - 1}",
-                    "",
-                )
+        #logger.debug(
+        #    f"{self.override_if_exists} and {Path(potential_path)} exists: {Path(potential_path).exists()}"
+        #)
+        #if self.override_if_exists and Path(potential_path).exists():
+        #    Path(potential_path).unlink()
+        #else:
+        #    unique = 0
+        #    while Path(potential_path).exists():
+        #        unique += 1
+        #        potential_path = potential_path.replace(
+        #            f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}"
+        #        )
+        #        potential_path = potential_path.replace(
+        #            f"-{unique - 1}",
+        #            "",
+        #        )
 
         srt.save(path=potential_path)

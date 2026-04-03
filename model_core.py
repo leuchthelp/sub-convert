@@ -4,14 +4,15 @@ import logging
 import typing
 import os
 
-os.environ['TRANSFORMERS_OFFLINE'] = '1'
+#os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from transformers import AutoModelForCausalLM, AutoProcessor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 import torch
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 static_languages = [
     "ar",
@@ -84,19 +85,18 @@ class OCRModelCore(ModelCore):
             attn_implementation = "sdpa"
 
         self.model = (
-            AutoModelForCausalLM.from_pretrained(
+            AutoModelForImageTextToText.from_pretrained(
                 model_name,
-                trust_remote_code=True,
                 dtype=torch.bfloat16,
                 attn_implementation=attn_implementation,
-                revision="650f07ae762a027065ff055342363bd11d684fa2",
+                #revision="650f07ae762a027065ff055342363bd11d684fa2",
             )
             .to(device=self.torch_device) # type: ignore
             .eval()
             .share_memory()
         )
         self.processor = AutoProcessor.from_pretrained(
-            model_name, trust_remote_code=True, use_fast=True
+            model_name, backend="torchvision"
         )
 
     def analyse(self, batch: list) -> str:

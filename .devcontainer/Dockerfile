@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm7.2_ubuntu24.04_py3.13_pytorch_release_2.10.0
+FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.14_pytorch_2.10.0
 
 
 RUN apt-get clean && apt-get update && apt-get install -y locales
@@ -7,7 +7,7 @@ RUN update-locale
 RUN apt-get update && apt-get install -y tesseract-ocr mkvtoolnix 
 
 RUN pip install --upgrade pip
-RUN pip install pymkv2 pytesseract pysrt pillow rich langcodes colorama einops transformers protobuf sentencepiece
+RUN pip install pymkv2 pytesseract pysrt pillow rich langcodes colorama einops transformers protobuf sentencepiece plotly kaleido
 
 ENV FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
 RUN . /opt/venv/bin/activate
