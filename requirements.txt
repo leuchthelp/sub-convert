@@ -6,6 +6,8 @@ rich
 langcodes
 colorama
 einops
-transformers==4.57.6
+transformers
 protobuf
 sentencepiece
+plotly
+kaleido

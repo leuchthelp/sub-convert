@@ -20,9 +20,10 @@ import os
 
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.CRITICAL, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def check_if_adjacent_exists(path: Path) -> bool:
@@ -189,6 +190,10 @@ def main():
     cpu_workers = args.cpu_workers
     gpu_ocr_workers = args.ocr_workers
     gpu_lang_workers = args.lang_workers
+
+    # Have to be a little careful with index counting as process numbering
+    # cannot be set beforehand. As such need to ensure mapping of queue ids
+    # to process ids
     for index in range(
         3 + gpu_ocr_workers + gpu_lang_workers,
         2 + cpu_workers + gpu_ocr_workers + gpu_lang_workers + 1,
@@ -207,7 +212,7 @@ def main():
                     gpu_ocr_batchsize,
                 ),
             )
-        )  # type: ignore
+        )
     del gpu_core
 
     gpu_lang_batchsize = 1
@@ -219,12 +224,13 @@ def main():
                 target=LangaugeGPUWorker(core=lang_core, queues=queues).run,
                 args=(gpu_lang_batchsize,),
             )
-        )  # type: ignore
+        ) 
     del lang_core
 
+    processes = gpu_ocr_processes + gpu_lang_processes
+
     try:
-        [process.start() for process in gpu_ocr_processes]
-        [process.start() for process in gpu_lang_processes]
+        [process.start() for process in processes]
 
         runnable = CPUWorker(queues, options)  # type: ignore
         with progress:
@@ -255,9 +261,6 @@ def main():
                                 progress.update(task_id=task_id, advance=1)
 
                                 task = tasks[description][1]
-
-                                # Additionally have to check for if "task.remaining <= 1.0" as sometimes can get stuff with one missing
-                                # Since file is still being saved and this only for fancy progressbar, should be ok
                                 if task.finished:
                                     progress.update(
                                         task_id=task.id, refresh=True, visible=False
@@ -265,20 +268,16 @@ def main():
 
                         # There should at least be a couple of tasks present, before we consider our progress finished.
                         # Otherwise if the tool is tool slow, it will immidiately end the update loop
-                        if progress.finished and not not tasks:
+                        if progress.finished and tasks:
                             end = True
 
     except KeyboardInterrupt:
         pass
 
     finally:
-        [process.terminate() for process in gpu_ocr_processes]
-        [process.join() for process in gpu_ocr_processes]
-        [process.close() for process in gpu_ocr_processes]
-
-        [process.terminate() for process in gpu_lang_processes]
-        [process.join() for process in gpu_lang_processes]
-        [process.close() for process in gpu_lang_processes]
+        [process.terminate() for process in processes]
+        [process.join() for process in processes]
+        [process.close() for process in processes]
 
 
 if __name__ == "__main__":

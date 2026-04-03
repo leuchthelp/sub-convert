@@ -9,6 +9,7 @@ import json
 import os
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
