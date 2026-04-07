@@ -1,5 +1,5 @@
-from media import PgsSubtitleItem, Palette
-from pgs import PgsReader, DisplaySet
+from pgs_subtitle_item import PgsSubtitleItem, Palette
+from pgs_segments import PgsReader, DisplaySet
 from dataclasses import dataclass
 from pysrt import SubRipTime
 from itertools import chain
@@ -70,14 +70,38 @@ class TimelineItem:
 
     @property
     def text(self) -> str:
-        return (
-            self.pgs_subtitle_item.text
-            if self.pgs_subtitle_item is not None
-            else self.__placeholder
-        )
+        text: str
+        try:
+            text = (
+                self.pgs_subtitle_item.text
+                if self.pgs_subtitle_item is not None
+                else self.__placeholder
+            )
+        except AttributeError:
+            text = self.__placeholder
+        return text
 
     def set_text(self, text: str):
         self.__placeholder = text
+
+    @property
+    def lang_estimate(self) -> list[tuple[str, typing.Any]]:
+        tmp: list[tuple[str, typing.Any]] = []
+        try:
+            tmp = (
+                self.pgs_subtitle_item.lang_estimate
+                if self.pgs_subtitle_item is not None
+                else []
+            )
+        except AttributeError:
+            pass
+        return tmp
+
+    @property
+    def duration(self) -> SubRipTime:
+        if self.end is None:
+            raise ValueError("End has not been set yet.")
+        return self.end - self.start
 
     def __repr__(self):
         return f"<{self.__class__.__name__} [{self}]>"
@@ -275,44 +299,12 @@ class SubtitleGroup:
                 != reset_statements.pcs.composition_objects[0].object_id
             ):
                 fixable.end = reset_statements.pcs.presentation_timestamp
+                fixable.associated_timestamp.append(fixable.end)
             else:
                 fixable.end = end.pcs.presentation_timestamp
+                fixable.associated_timestamp.append(fixable.end)
 
         return fixables
-
-    def __is_between(self, start: SubRipTime, end: SubRipTime, now: SubRipTime) -> bool:
-        is_between = False
-
-        is_between |= start <= now <= end
-        is_between |= end < start and (start <= now or now <= end)
-
-        return is_between
-
-    def __any_overlap(self, a: TimelineItem, b: TimelineItem) -> bool:
-        a_start = a.start
-        b_start = b.start
-        a_end = a.end
-        b_end = b.end
-
-        if self.__is_between(start=a_start, end=a_end, now=b.start):
-            return True
-        if self.__is_between(start=b_start, end=b_end, now=a.start):
-            return True
-
-        return False
-
-    def __find_overlapping_timelines(
-        self, timelines: list[dict[str, list[TimelineItem]]]
-    ):
-
-        for timeline in timelines:
-            bottom_timeline = timeline["Bottom"]
-            top_timeline = timeline["Top"]
-
-            for item in bottom_timeline:
-                overlapping = [
-                    top for top in top_timeline if self.__any_overlap(a=item, b=top)
-                ]
 
     def __gen_pgs_subtitle_items(
         self, timelines: list[dict[str, list[TimelineItem]]]
@@ -372,11 +364,11 @@ class Pgs:
                 groups.append(tmp)
                 tmp = []
 
-        test_groups = list(range(100, 112))
-        sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        #test_groups = list(range(100, 112))
+        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        # self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
         return list(
             chain.from_iterable(
@@ -384,16 +376,20 @@ class Pgs:
             )
         )
 
-    def dump_display_sets(self, display_sets: typing.List[DisplaySet]):
+    def dump_display_sets(self, display_sets: typing.List[DisplaySet], path=""):
         new_line = "\n"
+
+        actual_path = self.temp_folder if not path else path
+
         with open(
-            os.path.join(self.temp_folder, "display-sets.txt"),
+            os.path.join(actual_path, "display-sets.txt"),
             mode="w",
             encoding="utf8",
         ) as f:
             f.write(f"{new_line.join([str(ds) for ds in display_sets])}")
+
         with open(
-            os.path.join(self.temp_folder, "display-sets.json"),
+            os.path.join(actual_path, "display-sets.json"),
             mode="w",
             encoding="utf8",
         ) as f:

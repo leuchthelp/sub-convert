@@ -103,7 +103,6 @@ class CPUWorker:
         "task_queue",
         "progress_queue",
         "fallback",
-        "override_if_exists",
     )
 
     def __init__(
@@ -117,7 +116,6 @@ class CPUWorker:
         self.task_queue = queues["task_queue"]
         self.progress_queue = queues["progress_queue"]
         self.fallback = options["fallback_status"]
-        self.override_if_exists = options["override_if_exists"]
 
     def run(self, pgs_manager: PgsManager) -> bool:
         pgs_data = pgs_manager.get_pgs_images()
