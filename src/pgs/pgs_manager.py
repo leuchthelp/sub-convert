@@ -1,9 +1,8 @@
-from subtitle_group import SubtitleGroup, TimelineItem
+from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
 from pysrt import SubRipFile, SubRipItem, SubRipTime
-from pgs_subtitle_item import PgsSubtitleItem
+from pgs.pgs_subtitle_item import PgsSubtitleItem
 from dataclasses import dataclass
 from collections import Counter
-from subtitle_group import Pgs
 from langcodes import Language
 from dateutil import parser
 from itertools import chain

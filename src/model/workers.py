@@ -1,6 +1,6 @@
 from torch.multiprocessing import current_process, Queue
-from model_core import OCRModelCore, LanguageModelCore
-from pgs_manager import PgsManager, PgsSubtitleItem
+from model.model_core import OCRModelCore, LanguageModelCore
+from pgs.pgs_manager import PgsManager, PgsSubtitleItem
 from dataclasses import dataclass
 from copy import deepcopy
 from colorama import Fore

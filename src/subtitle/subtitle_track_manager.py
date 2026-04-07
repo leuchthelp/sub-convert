@@ -1,4 +1,4 @@
-from pgs_manager import PgsManager
+from pgs.pgs_manager import PgsManager
 from dataclasses import dataclass
 from pymkv import MKVFile
 from pathlib import Path

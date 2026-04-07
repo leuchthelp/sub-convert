@@ -1,4 +1,4 @@
-from utils import from_hex, safe_get, to_time
+from src.utils.utils import from_hex, safe_get, to_time
 from numpy import ndarray
 import numpy as np
 import logging
