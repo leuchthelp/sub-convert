@@ -33,7 +33,7 @@ class OCRGPUWorker:
         batch = []
         memory = {}
         while True:
-            try:
+            #try:
                 if not last_run_on_track:
                     image, return_queue = self.process_queue.get()
 
@@ -57,10 +57,10 @@ class OCRGPUWorker:
                         batch.clear()
                         memory.clear()
 
-            except:
-                logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
-                batch_size = len(batch)
-                last_run_on_track = True
+            #except:
+            #    logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
+            #    batch_size = len(batch)
+            #    last_run_on_track = True
 
     def __del__(self):
         del self.core
