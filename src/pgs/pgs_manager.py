@@ -102,8 +102,8 @@ class PgsManager:
                 for item in list(chain.from_iterable(timeline.values())):
                     tmp = pd.DataFrame(
                         data={
-                            "start": [parser.parse(str(item.start))],
-                            "end": [parser.parse(str(item.end))],
+                            "start": [str(parser.parse(str(item.start)))],
+                            "end": [str(parser.parse(str(item.end)))],
                             "placement": [item.position],
                             "text": [item.text],
                         },

@@ -12,7 +12,7 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 RUN apt-get update && apt-get -y install google-chrome-stable
 
 RUN pip install --upgrade pip
-RUN pip install pymkv2 pytesseract pysrt pillow rich langcodes colorama einops transformers protobuf sentencepiece plotly kaleido
+RUN pip install pymkv2 pytesseract pysrt pillow rich langcodes colorama einops transformers protobuf sentencepiece plotly kaleido nbformat
 
 ENV FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
 RUN . /opt/venv/bin/activate
