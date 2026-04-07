@@ -1,4 +1,4 @@
-from pgs_segments import (
+from pgs.pgs_segments import (
     PgsImage,
     ObjectDefinitionSegment,
     Palette,

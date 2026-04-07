@@ -1,5 +1,5 @@
-from pgs_subtitle_item import PgsSubtitleItem, Palette
-from pgs_segments import PgsReader, DisplaySet
+from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
+from pgs.pgs_segments import PgsReader, DisplaySet
 from dataclasses import dataclass
 from pysrt import SubRipTime
 from itertools import chain
