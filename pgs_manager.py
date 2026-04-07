@@ -1,23 +1,22 @@
 from subtitle_group import SubtitleGroup, TimelineItem
 from pysrt import SubRipFile, SubRipItem, SubRipTime
-from media import PgsSubtitleItem
+from pgs_subtitle_item import PgsSubtitleItem
 from dataclasses import dataclass
 from collections import Counter
 from subtitle_group import Pgs
 from langcodes import Language
+from dateutil import parser
 from itertools import chain
 from pymkv import MKVTrack
-from colorama import Fore
 from pathlib import Path
 from PIL import Image
-from dateutil import parser
 import plotly.express as px
-import plotly.io as pio
 import pandas as pd
 import numpy as np
 import subprocess
 import logging
 import hashlib
+import typing
 import shutil
 
 
@@ -25,15 +24,24 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def min_max(lo, hi):
-    if hi < lo:
-        lo, hi = hi, lo
-    return lo, hi
+def is_between(start: SubRipTime, end: SubRipTime, now: SubRipTime) -> bool:
+    is_between = False
+    is_between |= start <= now <= end
+    is_between |= end < start and (start <= now or now <= end)
+    return is_between
 
 
 @dataclass
 class PgsManager:
-    __slots__ = ("mkv_track", "tmp_path", "pgs", "fallback", "hash")
+    __slots__ = (
+        "mkv_track",
+        "tmp_path",
+        "pgs",
+        "fallback",
+        "hash",
+        "overwrite_if_exists",
+        "dump_debug",
+    )
 
     def __init__(
         self,
@@ -44,6 +52,12 @@ class PgsManager:
         self.hash = hashlib.sha256(str(self.mkv_track).encode()).hexdigest()
         self.tmp_path = Path(f"{options['path_to_tmp']}/{self.hash}")
         self.fallback = options["fallback"] if "fallback" in options else False
+        self.overwrite_if_exists = (
+            options["overwrite_if_exists"]
+            if "overwrite_if_exists" in options
+            else False
+        )
+        self.dump_debug = options["dump_debug"] if "dump_debug" in options else False
 
         if self.tmp_path.exists():
             shutil.rmtree(self.tmp_path)
@@ -63,11 +77,19 @@ class PgsManager:
 
         pgs_items = self.pgs.items
 
-        for index, item in enumerate(pgs_items):
-            image = Image.fromarray(item.image.data)
-            image.save(f"tmp/{index}.png")
+        if self.dump_debug:
+            debug_path = Path("debug")
+            debug_path.mkdir(parents=True, exist_ok=True)
 
-        self.pgs.dump_display_sets(self.pgs.display_sets)
+            path = Path(f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}")
+
+            image_path = Path(f"{path}/images")
+            image_path.mkdir(parents=True, exist_ok=True)
+            for index, item in enumerate(pgs_items):
+                image = Image.fromarray(item.image.data)
+                image.save(f"{image_path.absolute()}/{index}.png")
+
+            self.pgs.dump_display_sets(self.pgs.display_sets, path=str(path.absolute()))
 
         shutil.rmtree(path=self.tmp_path)
 
@@ -104,81 +126,103 @@ class PgsManager:
         debug_path = Path("debug")
         debug_path.mkdir(parents=True, exist_ok=True)
 
-        path = Path(f"{debug_path}/{self.hash[0:6]}")
+        path = Path(f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}")
         path.mkdir(parents=True, exist_ok=True)
         df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
         fig.write_image(f"{path.absolute()}/quickview-{self.hash[0:6]}.svg")
 
-    def __gen_srt_items(self, subtitle_groups: list[SubtitleGroup]) -> list[SubRipItem]:
-        index = 0
-        subtitle_items: list[SubRipItem] = []
+    def __srt_combine_timelines(
+        self, subtitle_groups: list[SubtitleGroup]
+    ) -> list[TimelineItem]:
         intermediate: list[TimelineItem] = []
 
         for group in subtitle_groups:
             for timeline in group.timelines:
                 if group.overlap:
-                    bottom_items = timeline["Bottom"]
-                    top_items = timeline["Top"]
+                    tmp = list(
+                        chain.from_iterable(
+                            [
+                                (item.start, item.end)
+                                for item in chain.from_iterable(timeline.values())
+                            ]
+                        )
+                    )
+                    timeline_events: list[SubRipTime] = []
+                    for x in tmp:
+                        if x not in timeline_events:
+                            timeline_events.append(x)
+                    timeline_events.sort()
 
-                    for item in bottom_items:
-                        overlapping_with = item.associated_timestamp
+                    timeline_items = list(chain.from_iterable(timeline.values()))
+                    for index, event in enumerate(timeline_events):
+                        overlapping: list[TimelineItem] = []
 
-                        for entry in top_items:
-                            if entry.start in overlapping_with and entry.end in overlapping_with:
-                                start = max(item.start, entry.start)
-                                end = min(item.end, entry.end)
-                                new_tlitem = TimelineItem(start=start, end=end)
+                        for item in timeline_items:
+                            if (
+                                item.start == event
+                                or item.end != event
+                                and is_between(item.start, item.end, event)
+                            ):
+                                overlapping.append(item)
 
-                                bottom_text: str
-                                top_text: str
+                        if len(overlapping) == 1:
+                            item = overlapping[0]
 
-                                if item.position == "Bottom":
-                                    bottom_text = item.text
-                                    top_text = entry.text
-                                else:
-                                    bottom_text = entry.text
-                                    top_text = item.text
+                            start = event
+                            end: SubRipTime
+                            try:
+                                end = timeline_events[index + 1]
+                            except IndexError:
+                                end = item.end
 
-                                new_tlitem.set_text(top_text + "\n" + bottom_text)
-                                intermediate.append(new_tlitem)
+                            new_tline = item
+                            if item.start != start or item.end != end:
+                                new_tline = TimelineItem(start=start, end=end)
+                                new_tline.set_text(item.text)
 
-                                overlapping_with.remove(entry.start)
+                            intermediate.append(new_tline)
 
-                            elif entry.end in overlapping_with and entry.start not in overlapping_with and item.start != entry.end:
-                                if item.start != entry.start:
-                                    start, end = min_max(item.start, entry.start)
-                                    new_tlitem = TimelineItem(start=start, end=end)
-                                    new_tlitem.set_text(
-                                        item.text if start == item.start else entry.text
-                                    )
-                                    intermediate.append(new_tlitem)
-                                    overlapping_with.remove(entry.end)
+                        if len(overlapping) == 2:
+                            bottom, top = (
+                                (overlapping[0], overlapping[1])
+                                if overlapping[0].position == "Bottom"
+                                else (overlapping[1], overlapping[0])
+                            )
 
-                            elif entry.start in overlapping_with and entry.end not in overlapping_with and item.end != entry.start:
-                                if item.end != entry.end:
-                                    start, end = min_max(item.end, entry.end)
-                                    new_tlitem = TimelineItem(start=start, end=end)
-                                    new_tlitem.set_text(
-                                        item.text if start == item.end else entry.text
-                                    )
-                                    intermediate.append(new_tlitem)
-                                    overlapping_with.remove(entry.start)
-                            else:
-                                intermediate.append(entry)
+                            start = event
+                            end: SubRipTime
+                            try:
+                                end = timeline_events[index + 1]
+                            except IndexError:
+                                end = max(bottom.end, top.end)
 
+                            new_tline = TimelineItem(start=start, end=end)
+                            new_tline.set_text(top.text + "\n-\n" + bottom.text)
+
+                            intermediate.append(new_tline)
                 else:
                     [
                         intermediate.append(item)
                         for item in list(chain.from_iterable(timeline.values()))
                     ]
 
+        return intermediate
+
+    def __gen_srt_items(self, subtitle_groups: list[SubtitleGroup]) -> list[SubRipItem]:
+        intermediate = self.__srt_combine_timelines(subtitle_groups=subtitle_groups)
+
+        subtitle_items: list[SubRipItem] = []
+        for index, item in enumerate(intermediate):
+            subtitle_items.append(
+                SubRipItem(index=index, start=item.start, end=item.end, text=item.text)
+            )
         return subtitle_items
 
     def save_file(self, format: str = "srt"):
 
         subtitle_groups: list[SubtitleGroup] = self.pgs.subtitle_groups
 
-        if True:
+        if self.dump_debug:
             self.__debug_vis_timelines(subtitle_groups=subtitle_groups)
 
         items: list[SubRipItem] = []
@@ -194,15 +238,19 @@ class PgsManager:
 
         srt = SubRipFile(items=items)
 
-        combined: list[list] = []
-        # if not self.fallback:
-        #    combined: list[list] = savable["combined"]
+        combined: list[list[tuple[str, typing.Any]]] = []
+        if not self.fallback:
+            for group in subtitle_groups:
+                for timeline in group.timelines:
+                    [
+                        combined.append(item.lang_estimate)
+                        for item in list(chain.from_iterable(timeline.values()))
+                    ]
 
         track = self.mkv_track
-
         path = Path(track.file_path).name.replace(".mkv", "")
         counter = Counter()
-        average = {}
+        average: dict[str, list] = {}
         weights = {}
 
         for both in combined:
@@ -213,61 +261,38 @@ class PgsManager:
                 else:
                     average[label].append(prob)
 
-        logger.debug(Fore.CYAN + f"{counter}, probablities {average}" + Fore.RESET)
-
         for label, count in counter.items():
             weights[label] = count / counter.total()
         for label, prob in average.items():
             average[label] = np.average(prob) * weights[label]
 
-        logger.debug(
-            Fore.CYAN
-            + f"{counter}, probablities {average}, weights: {weights}"
-            + Fore.RESET
-        )
-
-        final_lang = track.language_ietf
+        final_lang = track.language_ietf if track.language_ietf is not None else ""
         if not self.fallback:
-            final_lang = max(average, key=average.get)
-
-        logger.debug(
-            Fore.MAGENTA
-            + f"picked language: {final_lang}, averages: {average}"
-            + Fore.RESET
-        )
+            final_lang = max(average, key=average.get)  # type: ignore
 
         forced = True if track.forced_track or len(items) <= 150 else False
-
         path = path + ".sdh" if track.flag_hearing_impaired else ""
         path = path + ".forced" if forced else ""
-        path = (
-            path + "." + track.language
-            if track.language_ietf == final_lang
-            else Language.get(final_lang).to_alpha3()
-            if track.language is not None
-            else ""
-        )
-        potential_path = f"{Path(track.file_path).parent}/{path}.srt"
 
-        logger.debug(
-            f"path: {potential_path}, exists prior: {Path(potential_path).exists()}, global: {Path(potential_path).absolute()}"
-        )
+        if track.language_ietf == final_lang:
+            if track.language is not None:
+                path = path + "." + track.language
+        else:
+            path = path + "." + Language.get(final_lang).to_alpha3()
 
-        # logger.debug(
-        #    f"{self.override_if_exists} and {Path(potential_path)} exists: {Path(potential_path).exists()}"
-        # )
-        # if self.override_if_exists and Path(potential_path).exists():
-        #    Path(potential_path).unlink()
-        # else:
-        #    unique = 0
-        #    while Path(potential_path).exists():
-        #        unique += 1
-        #        potential_path = potential_path.replace(
-        #            f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}"
-        #        )
-        #        potential_path = potential_path.replace(
-        #            f"-{unique - 1}",
-        #            "",
-        #        )
+        potential_path = f"{str(Path(track.file_path)).replace('.mkv', '')}{path}.srt"
+        if self.overwrite_if_exists and Path(potential_path).exists():
+            Path(potential_path).unlink()
+        else:
+            unique = 0
+            while Path(potential_path).exists():
+                unique += 1
+                potential_path = potential_path.replace(
+                    f"{path}", f"{path}-{unique}" if unique != 0 else f"{path}"
+                )
+                potential_path = potential_path.replace(
+                    f"-{unique - 1}",
+                    "",
+                )
 
         srt.save(path=potential_path)

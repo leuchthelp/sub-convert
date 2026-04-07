@@ -65,10 +65,10 @@ def main():
     )
     parser.add_argument(
         "-o",
-        "--override",
+        "--overwrite",
         type=bool,
         default=False,
-        help="Override existing .srt file. Default: False",
+        help="Overwrite existing .srt file. Default: False",
     )
     parser.add_argument(
         "-s",
@@ -106,6 +106,13 @@ def main():
         default=1,
         help="Size of the batch send to the OCR model. USE WITH CAUTION ON AMD GPU! Default: 1",
     )
+    parser.add_argument(
+        "-d",
+        "--dump-debug",
+        type=bool,
+        default=False,
+        help="Dumps debug info like a view of the timelines and PGS Displaysets under /debug/hash"
+    )
     args = parser.parse_args()
 
     # Setup tmp directory and other parsed arguments
@@ -114,8 +121,9 @@ def main():
         tmp_path.mkdir()
     options = {
         "path_to_tmp": "tmp",
-        "override_if_exists": args.override,
+        "overwrite_if_exists": args.overwrite,
         "skip_if_existing": args.skip_if_exists,
+        "dump_debug": args.dump_debug,
     }
 
     root = Path(args.path)
@@ -129,7 +137,7 @@ def main():
         )
     )
 
-    pgs_managers = [list(pgs_managers)[0]]
+    #pgs_managers = [list(pgs_managers)[0]]
 
     # Setup basic options relating to pytorch and set environmental variables if needed
     options["fallback_status"] = False
