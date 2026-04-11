@@ -1,7 +1,12 @@
-from src.model.model_core import OCRModelCore, LanguageModelCore, LinguaCore
 from torch.multiprocessing import Process, Manager, Pool, set_start_method
 from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
 from src.subtitle.subtitle_track_manager import SubtitleTrackManager
+from src.model.model_core import (
+    OCRModelCore,
+    TesseractCore,
+    LanguageModelCore,
+    LinguaCore,
+)
 from itertools import chain
 from rich.progress import (
     Progress,
@@ -67,13 +72,13 @@ def main():
     parser.add_argument(
         "-o",
         "--overwrite",
-        action='store_true',
+        action="store_true",
         help="Overwrite existing .srt file. Default: False",
     )
     parser.add_argument(
         "-s",
         "--skip_if_exists",
-        action='store_true',
+        action="store_true",
         help="Skip extracting and converting tracks if adjacent .srt track for file exist. Default: False",
     )
 
@@ -108,8 +113,8 @@ def main():
     parser.add_argument(
         "-d",
         "--dump-debug",
-        action='store_true',
-        help="Dumps debug info like a view of the timelines and PGS Displaysets under /debug/hash"
+        action="store_true",
+        help="Dumps debug info like a view of the timelines and PGS Displaysets under /debug/hash",
     )
     args = parser.parse_args()
 
@@ -135,25 +140,22 @@ def main():
         )
     )
 
-    #pgs_managers = [list(pgs_managers)[0]]
+    # pgs_managers = [list(pgs_managers)[0]]
 
     # Setup basic options relating to pytorch and set environmental variables if needed
-    options["fallback_status"] = False
-    try:
-        torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-        if torch_device == "cuda":
-            # Check for working rocm and activate flash attention, otherwise its NVIDIA
-            if torch.version.hip is not None:
-                os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
-                #os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
 
-        if torch.xpu.is_available():
-            options["intel_disable_flash"] = True
-            torch_device = "xpu"
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch_device == "cuda":
+        # Check for working rocm and activate flash attention, otherwise its NVIDIA
+        if torch.version.hip is not None:
+            os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
+            # os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
 
-        options["torch_device"] = torch_device
-    except:
-        options["fallback_status"] = True
+    if torch.xpu.is_available():
+        options["intel_disable_flash"] = True
+        torch_device = "xpu"
+
+    options["torch_device"] = torch_device
 
     # Setup ocr prompt and message template
     ocr_task = "ocr"
@@ -210,11 +212,16 @@ def main():
 
     gpu_ocr_batchsize = 1
     gpu_ocr_processes: list[Process] = []
-    gpu_core = OCRModelCore(options=options)
-    for _ in range(0, gpu_ocr_workers):
+    gpu_core = (
+        TesseractCore(options=options)
+        if torch_device == "cpu"
+        else OCRModelCore(options=options)
+    )
+    for idx in range(0, gpu_ocr_workers):
         gpu_ocr_processes.append(
             Process(
                 target=OCRGPUWorker(core=gpu_core, queues=queues).run,
+                name=f"OCRGPU{idx}",
                 args=(
                     message_template,
                     gpu_ocr_batchsize,
@@ -225,11 +232,16 @@ def main():
 
     gpu_lang_batchsize = 1
     gpu_lang_processes: list[Process] = []
-    lang_core = LanguageModelCore(options=options)
-    for _ in range(0, gpu_lang_workers):
+    lang_core = (
+        LinguaCore(options=options)
+        if torch_device == "cpu"
+        else LanguageModelCore(options=options)
+    )
+    for idx in range(0, gpu_lang_workers):
         gpu_lang_processes.append(
             Process(
                 target=LanguageGPUWorker(core=lang_core, queues=queues).run,
+                name=f"LanguageGPU{idx}",
                 args=(gpu_lang_batchsize,),
             )
         )

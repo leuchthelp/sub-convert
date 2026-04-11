@@ -1,11 +1,10 @@
-from torch.multiprocessing import current_process, Queue
 from model.model_core import OCRModelCore, LanguageModelCore
+from torch.multiprocessing import current_process, Queue
 from pgs.pgs_manager import PgsManager, PgsSubtitleItem
 from dataclasses import dataclass
 from copy import deepcopy
 from colorama import Fore
 from pathlib import Path
-import pytesseract as tess
 import logging
 import typing
 
@@ -101,7 +100,6 @@ class CPUWorker:
         "queues",
         "task_queue",
         "progress_queue",
-        "fallback",
     )
 
     def __init__(
@@ -114,7 +112,6 @@ class CPUWorker:
         # Literally just for the progressbars to function as expected
         self.task_queue = queues["task_queue"]
         self.progress_queue = queues["progress_queue"]
-        self.fallback = options["fallback_status"]
 
     def run(self, pgs_manager: PgsManager) -> bool:
         pgs_data = pgs_manager.get_pgs_images()
@@ -141,7 +138,7 @@ class CPUWorker:
             + f"{queue_index} got queue: {return_queue}"
             + Fore.RESET
         )
-        finished: dict[int, tuple[PgsSubtitleItem, str]] = {}
+        finished: dict[int, PgsSubtitleItem] = {}
         for index, (image, item) in enumerate(pgs_data):
             test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
@@ -149,12 +146,8 @@ class CPUWorker:
 
             image = image.convert("RGB")
             text = ""
-            if not self.fallback:
-                self.gpu_ocr_queue.put_nowait((image, queue_index, index))
-            else:
-                text = tess.image_to_string(image=image)
-
-            finished[index] = (item, text)
+            self.gpu_ocr_queue.put_nowait((image, queue_index, index))
+            finished[index] = item
 
         for index in finished.keys():
             self.progress_queue.put_nowait(
@@ -164,15 +157,12 @@ class CPUWorker:
             )
 
             combined: list[tuple[str, typing.Any]] = []
-            if not self.fallback:
-                text, combined, index = return_queue.get()
-            else:
-                text = finished[index][1]
+            text, combined, index = return_queue.get()
 
             if not text:
                 continue
 
-            item = finished[index][0]
+            item = finished[index]
             item.text = text
             item.lang_estimate = combined
 
