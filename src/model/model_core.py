@@ -98,7 +98,7 @@ class OCRModelCore(ModelCore):
             model_name, backend="torchvision"
         )
 
-    def analyse(self, batch: list) -> str:
+    def analyse(self, batch: list) -> list[str]:
 
         inputs = self.processor.apply_chat_template(
             batch,
@@ -116,7 +116,7 @@ class OCRModelCore(ModelCore):
         generated_ids_trimmed = [
             out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, out)
         ]
-        texts = self.processor.batch_decode(
+        texts: list[str] = self.processor.batch_decode(
             generated_ids_trimmed,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
@@ -130,6 +130,25 @@ class OCRModelCore(ModelCore):
     def __del__(self):
         del self.model
         del self.processor
+
+
+@dataclass
+class TesseractCore(OCRModelCore):
+    def __init__(self, options={}):
+        pass
+
+    def analyse(self, batch: list) -> list[str]:
+        import pytesseract as tess
+
+        texts: list[str] = []
+        for entry in batch:
+            image = entry[0]["content"][0]["image"]
+            texts.append(tess.image_to_string(image=image))
+
+        return texts
+    
+    def __del__(self):
+        del self
 
 
 @dataclass
