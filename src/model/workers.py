@@ -31,36 +31,36 @@ class OCRGPUWorker:
     def run(self, message_template: list, batch_size=16):
         last_run_on_track = False
         batch = []
-        memory = {}
+        memory: dict[int, tuple[str, int]] = {}
         while True:
-            #try:
-                if not last_run_on_track:
-                    image, return_queue = self.process_queue.get()
+            # try:
+            if not last_run_on_track:
+                image, return_queue, idx = self.process_queue.get()
 
-                    tmp_template = deepcopy(message_template)
-                    tmp_template[0]["content"][0]["image"] = image
-                    batch.append(tmp_template)
-                    memory[str(len(batch) - 1)] = return_queue
+                tmp_template = deepcopy(message_template)
+                tmp_template[0]["content"][0]["image"] = image
+                batch.append(tmp_template)
+                memory[len(batch) - 1] = (return_queue, idx)
 
-                if len(batch) == batch_size:
-                    last_run_on_track = False
+            if len(batch) == batch_size:
+                last_run_on_track = False
 
-                    if batch and memory:
-                        texts = self.core.analyse(batch=batch)
-                        logger.debug(f"{len(batch)}, {memory}, {texts}")
-                        [
-                            self.pass_queue.put_nowait(
-                                (texts[int(index)], return_queue)
-                            )
-                            for index, return_queue in memory.items()
-                        ]
-                        batch.clear()
-                        memory.clear()
+                if batch and memory:
+                    texts = self.core.analyse(batch=batch)
+                    logger.debug(f"{len(batch)}, {memory}, {texts}")
+                    [
+                        self.pass_queue.put_nowait(
+                            (texts[index], return_queue, idx)
+                        )
+                        for index, (return_queue, idx) in memory.items()
+                    ]
+                    batch.clear()
+                    memory.clear()
 
-            #except:
-            #    logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
-            #    batch_size = len(batch)
-            #    last_run_on_track = True
+        # except:
+        #    logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
+        #    batch_size = len(batch)
+        #    last_run_on_track = True
 
     def __del__(self):
         del self.core
@@ -82,12 +82,12 @@ class LangaugeGPUWorker:
     def run(self, batch_size=16):
         end = False
         while not end:
-            original_text, return_queue = self.pass_queue.get()
+            original_text, return_queue, idx = self.pass_queue.get()
             logger.debug(f"{original_text}, {return_queue}")
 
             text = str(original_text).lower()
             combined = self.core.get_topk(text=text)
-            self.queues[return_queue].put_nowait((original_text, combined))
+            self.queues[return_queue].put_nowait((original_text, combined, idx))
 
         logger.debug(Fore.MAGENTA + "LanguageGPUWorker ended" + Fore.RESET)
 
@@ -142,8 +142,8 @@ class CPUWorker:
             + f"{queue_index} got queue: {return_queue}"
             + Fore.RESET
         )
-        finished: list[tuple[PgsSubtitleItem, str]] = []
-        for image, item in pgs_data:
+        finished: dict[int, tuple[PgsSubtitleItem, str]] = {}
+        for index, (image, item) in enumerate(pgs_data):
             test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
                 continue
@@ -151,13 +151,13 @@ class CPUWorker:
             image = image.convert("RGB")
             text = ""
             if not self.fallback:
-                self.gpu_ocr_queue.put_nowait((image, queue_index))
+                self.gpu_ocr_queue.put_nowait((image, queue_index, index))
             else:
                 text = tess.image_to_string(image=image)
 
-            finished.append((item, text))
+            finished[index] = (item, text)
 
-        for item, text in finished:
+        for index in finished.keys():
             self.progress_queue.put_nowait(
                 (
                     f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"
@@ -166,11 +166,14 @@ class CPUWorker:
 
             combined: list[tuple[str, typing.Any]] = []
             if not self.fallback:
-                text, combined = return_queue.get()
+                text, combined, index = return_queue.get()
+            else:
+                text = finished[index][1]
 
             if not text:
                 continue
-
+            
+            item = finished[index][0]
             item.text = text
             item.lang_estimate = combined
 

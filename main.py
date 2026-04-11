@@ -66,15 +66,13 @@ def main():
     parser.add_argument(
         "-o",
         "--overwrite",
-        type=bool,
-        default=False,
+        action='store_true',
         help="Overwrite existing .srt file. Default: False",
     )
     parser.add_argument(
         "-s",
         "--skip_if_exists",
-        type=bool,
-        default=False,
+        action='store_true',
         help="Skip extracting and converting tracks if adjacent .srt track for file exist. Default: False",
     )
 
@@ -109,8 +107,7 @@ def main():
     parser.add_argument(
         "-d",
         "--dump-debug",
-        type=bool,
-        default=False,
+        action='store_true',
         help="Dumps debug info like a view of the timelines and PGS Displaysets under /debug/hash"
     )
     args = parser.parse_args()
@@ -258,9 +255,7 @@ def main():
                                 description=description, total=total, visible=True
                             )
 
-                            task = [
-                                task for task in progress.tasks if task.id == task_id
-                            ][0]
+                            task = progress.tasks[task_id]
                             tasks[description] = (task_id, task)
 
                         if not progress_queue.empty():
