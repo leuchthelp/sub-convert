@@ -55,7 +55,11 @@ def get_candidates(root: Path, options: dict):
 
 
 def get_classes(module):
-    return [cls.__name__ for _, cls in inspect.getmembers(module, inspect.isclass) if cls.__module__ == module.__name__]
+    return [
+        cls.__name__
+        for _, cls in inspect.getmembers(module, inspect.isclass)
+        if cls.__module__ == module.__name__
+    ]
 
 
 def import_class(class_name: str, module_name: str):
@@ -76,14 +80,14 @@ def main():
         "-om",
         "--ocr_model_core",
         choices=ocr_classes,
-        default="OCRModelCore",
+        default="TesseractCore",
         help="List all options within the ocr_model_core.py with are the possible OCRModelCores to choose from.",
     )
     parser.add_argument(
         "-lm",
         "--language_model_core",
         choices=lang_classes,
-        default="LanguageModelCore",
+        default="LinguaCore",
         help="List all options within the language_model_core.py with are the possible LanguageModelCores to choose from.",
     )
     parser.add_argument(
@@ -163,8 +167,6 @@ def main():
             for path in convertibles
         )
     )
-
-    # pgs_managers = [list(pgs_managers)[0]]
 
     # Setup basic options relating to pytorch and set environmental variables if needed
 
@@ -253,7 +255,9 @@ def main():
 
     gpu_lang_batchsize = 1
     gpu_lang_processes: list[Process] = []
-    LanguageCoreClass = import_class(args.language_model_core, language_model_core.__name__)
+    LanguageCoreClass = import_class(
+        args.language_model_core, language_model_core.__name__
+    )
     lang_core = LanguageCoreClass(options=options)
     for idx in range(0, gpu_lang_workers):
         gpu_lang_processes.append(
