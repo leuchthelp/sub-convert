@@ -4,7 +4,7 @@ import logging
 import typing
 import os
 
-#os.environ['TRANSFORMERS_OFFLINE'] = '1'
+# os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -89,9 +89,9 @@ class OCRModelCore(ModelCore):
                 model_name,
                 dtype=torch.bfloat16,
                 attn_implementation=attn_implementation,
-                #revision="650f07ae762a027065ff055342363bd11d684fa2",
+                device_map="auto",
             )
-            .to(device=self.torch_device) # type: ignore
+            .to(device=self.torch_device)  # type: ignore
             .eval()
             .share_memory()
         )
@@ -107,13 +107,11 @@ class OCRModelCore(ModelCore):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            padding=True,
-            padding_side="left",
         ).to(self.torch_device)
 
         with torch.inference_mode():
             out = self.model.generate(
-                **inputs, max_new_tokens=1024, do_sample=False, use_cache=True
+                **inputs, max_new_tokens=512, do_sample=False, use_cache=True
             )
 
         generated_ids_trimmed = [
@@ -137,7 +135,7 @@ class OCRModelCore(ModelCore):
 
 @dataclass
 class LanguageModelCore(ModelCore):
-    __slots__ = ("model", "processor", "torch_device", "languages", "tokenizer")
+    __slots__ = ("model", "tokenizer", "torch_device", "languages")
 
     def __init__(
         self,
@@ -148,16 +146,29 @@ class LanguageModelCore(ModelCore):
         self.tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=model_name
         )
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            pretrained_model_name_or_path=model_name, num_labels=45
-        )
+
         self.torch_device = (
             options["torch_device"] if "torch_device" in options else "cpu"
         )
-        self.languages = languages
 
-        self.model.to(self.torch_device)
-        self.model.eval().share_memory()
+        attn_implementation = "flash_attention_2"
+        if "intel_disable_flash" in options or self.torch_device == "cpu":
+            attn_implementation = "sdpa"
+
+        self.model = (
+            AutoModelForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path=model_name,
+                num_labels=45,
+                dtype=torch.float16,
+                attn_implementation=attn_implementation,
+                device_map="auto",
+            )
+            .to(self.torch_device)
+            .eval()
+            .share_memory()
+        )
+
+        self.languages = languages
 
     def __predict(self, text: str) -> torch.Tensor:
         tokenized = self.tokenizer(
@@ -166,21 +177,17 @@ class LanguageModelCore(ModelCore):
             truncation=True,
             max_length=128,
             return_tensors="pt",
-        )
-        input_ids = tokenized["input_ids"]
-        attention_mask = tokenized["attention_mask"]
+        ).to(self.torch_device)
 
         with torch.no_grad():
-            input_ids = input_ids.to(self.torch_device)
-            attention_mask = attention_mask.to(self.torch_device)
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs = self.model(input_ids=tokenized["input_ids"], attention_mask=tokenized["attention_mask"])
 
         logits = outputs.logits
         probabilities = torch.nn.functional.softmax(logits, dim=1)
 
         logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
 
-        del input_ids, attention_mask, logits, outputs, tokenized
+        del logits, outputs, tokenized
 
         return probabilities
 

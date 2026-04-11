@@ -80,8 +80,8 @@ def main():
         "-c",
         "--cpu_workers",
         type=int,
-        default=4,
-        help="Number of CPU workers. Default: 4",
+        default=2,
+        help="Number of CPU workers. Default: 2",
     )
     parser.add_argument(
         "-ow",
