@@ -66,7 +66,7 @@ class OCRGPUWorker:
 
 
 @dataclass
-class LangaugeGPUWorker:
+class LanguageGPUWorker:
     __slots__ = ("pass_queue", "queues", "core")
 
     def __init__(

@@ -1,7 +1,7 @@
+from src.model.model_core import OCRModelCore, LanguageModelCore, LinguaCore
 from torch.multiprocessing import Process, Manager, Pool, set_start_method
-from src.model.workers import OCRGPUWorker, LangaugeGPUWorker, CPUWorker
+from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
 from src.subtitle.subtitle_track_manager import SubtitleTrackManager
-from src.model.model_core import OCRModelCore, LanguageModelCore
 from itertools import chain
 from rich.progress import (
     Progress,
@@ -10,6 +10,7 @@ from rich.progress import (
     TaskProgressColumn,
     TimeRemainingColumn,
     MofNCompleteColumn,
+    TimeElapsedColumn,
 )
 from rich.progress import TaskID, Task
 from pathlib import Path
@@ -181,6 +182,7 @@ def main():
         TaskProgressColumn(),
         MofNCompleteColumn(),
         TimeRemainingColumn(),
+        TimeElapsedColumn(),
     )
 
     # Setup gpu processes and queues used for communication
@@ -227,7 +229,7 @@ def main():
     for _ in range(0, gpu_lang_workers):
         gpu_lang_processes.append(
             Process(
-                target=LangaugeGPUWorker(core=lang_core, queues=queues).run,
+                target=LanguageGPUWorker(core=lang_core, queues=queues).run,
                 args=(gpu_lang_batchsize,),
             )
         )
