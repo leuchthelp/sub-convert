@@ -2,14 +2,11 @@ from dataclasses import dataclass
 from colorama import Fore
 import logging
 import typing
+import torch
 import os
 
 # os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from transformers import AutoModelForImageTextToText, AutoProcessor
-import torch
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -78,6 +75,8 @@ class OCRModelCore(ModelCore):
         model_name="PaddlePaddle/PaddleOCR-VL-1.5",
         options={},
     ):
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+
         self.torch_device = options["torch_device"]
 
         attn_implementation = "flash_attention_2"
@@ -143,6 +142,8 @@ class LanguageModelCore(ModelCore):
         languages: list[str] = static_languages,
         options={},
     ):
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=model_name
         )
@@ -180,7 +181,10 @@ class LanguageModelCore(ModelCore):
         ).to(self.torch_device)
 
         with torch.no_grad():
-            outputs = self.model(input_ids=tokenized["input_ids"], attention_mask=tokenized["attention_mask"])
+            outputs = self.model(
+                input_ids=tokenized["input_ids"],
+                attention_mask=tokenized["attention_mask"],
+            )
 
         logits = outputs.logits
         probabilities = torch.nn.functional.softmax(logits, dim=1)
@@ -216,3 +220,40 @@ class LanguageModelCore(ModelCore):
     def __del__(self):
         del self.model
         del self.tokenizer
+
+
+@dataclass
+class LinguaCore(LanguageModelCore):
+    __slots__ = "detector"
+
+    def __init__(
+        self,
+        options={},
+    ):
+        self.detector = None
+
+    def __init_around_pickle(self):
+        from lingua import Language, LanguageDetectorBuilder
+
+        languages = [
+            Language.ENGLISH,
+            Language.FRENCH,
+            Language.GERMAN,
+            Language.SPANISH,
+            Language.JAPANESE,
+        ]
+        return LanguageDetectorBuilder.from_languages(*languages).build()
+
+    def get_topk(self, text: str, k=3) -> list[tuple[str, typing.Any]]:
+        if self.detector is None:
+            self.detector = self.__init_around_pickle()
+
+        confidence_values = self.detector.compute_language_confidence_values(text)
+        tmp = [
+            (str(confidence.language.iso_code_639_1.name), float(confidence.value))
+            for confidence in confidence_values
+        ]
+        return tmp
+
+    def __del__(self):
+        del self
