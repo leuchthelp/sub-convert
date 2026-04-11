@@ -1,12 +1,7 @@
 from torch.multiprocessing import Process, Manager, Pool, set_start_method
 from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
 from src.subtitle.subtitle_track_manager import SubtitleTrackManager
-from src.model.model_core import (
-    OCRModelCore,
-    TesseractCore,
-    LanguageModelCore,
-    LinguaCore,
-)
+from model import ocr_model_core, language_model_core
 from itertools import chain
 from rich.progress import (
     Progress,
@@ -19,7 +14,9 @@ from rich.progress import (
 )
 from rich.progress import TaskID, Task
 from pathlib import Path
+import importlib
 import argparse
+import inspect
 import logging
 import torch
 import os
@@ -57,10 +54,37 @@ def get_candidates(root: Path, options: dict):
                 yield file.absolute()
 
 
+def get_classes(module):
+    return [cls.__name__ for _, cls in inspect.getmembers(module, inspect.isclass) if cls.__module__ == module.__name__]
+
+
+def import_class(class_name: str, module_name: str):
+    module = importlib.import_module(module_name)
+    class_ = getattr(module, class_name)
+    return class_
+
+
 def main():
+    ocr_classes = get_classes(ocr_model_core)
+    lang_classes = get_classes(language_model_core)
+
     parser = argparse.ArgumentParser(
         prog="PGS subtitle conversion using OCR and language identification on MKV files.",
         description="run python based PGS subtitle recognition",
+    )
+    parser.add_argument(
+        "-om",
+        "--ocr_model_core",
+        choices=ocr_classes,
+        default="OCRModelCore",
+        help="List all options within the ocr_model_core.py with are the possible OCRModelCores to choose from.",
+    )
+    parser.add_argument(
+        "-lm",
+        "--language_model_core",
+        choices=lang_classes,
+        default="LanguageModelCore",
+        help="List all options within the language_model_core.py with are the possible LanguageModelCores to choose from.",
     )
     parser.add_argument(
         "-p",
@@ -212,11 +236,8 @@ def main():
 
     gpu_ocr_batchsize = 1
     gpu_ocr_processes: list[Process] = []
-    gpu_core = (
-        TesseractCore(options=options)
-        if torch_device == "cpu"
-        else OCRModelCore(options=options)
-    )
+    GPUCoreClass = import_class(args.ocr_model_core, ocr_model_core.__name__)
+    gpu_core = GPUCoreClass(options=options)
     for idx in range(0, gpu_ocr_workers):
         gpu_ocr_processes.append(
             Process(
@@ -232,11 +253,8 @@ def main():
 
     gpu_lang_batchsize = 1
     gpu_lang_processes: list[Process] = []
-    lang_core = (
-        LinguaCore(options=options)
-        if torch_device == "cpu"
-        else LanguageModelCore(options=options)
-    )
+    LanguageCoreClass = import_class(args.language_model_core, language_model_core.__name__)
+    lang_core = LanguageCoreClass(options=options)
     for idx in range(0, gpu_lang_workers):
         gpu_lang_processes.append(
             Process(
