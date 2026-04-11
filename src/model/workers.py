@@ -33,34 +33,33 @@ class OCRGPUWorker:
         batch = []
         memory: dict[int, tuple[str, int]] = {}
         while True:
-            # try:
-            if not last_run_on_track:
-                image, return_queue, idx = self.process_queue.get()
+            try:
+                if not last_run_on_track:
+                    image, return_queue, idx = self.process_queue.get()
 
-                tmp_template = deepcopy(message_template)
-                tmp_template[0]["content"][0]["image"] = image
-                batch.append(tmp_template)
-                memory[len(batch) - 1] = (return_queue, idx)
+                    tmp_template = deepcopy(message_template)
+                    tmp_template[0]["content"][0]["image"] = image
+                    batch.append(tmp_template)
+                    memory[len(batch) - 1] = (return_queue, idx)
 
-            if len(batch) == batch_size:
-                last_run_on_track = False
+                if len(batch) == batch_size:
+                    last_run_on_track = False
 
-                if batch and memory:
-                    texts = self.core.analyse(batch=batch)
-                    logger.debug(f"{len(batch)}, {memory}, {texts}")
-                    [
-                        self.pass_queue.put_nowait(
-                            (texts[index], return_queue, idx)
-                        )
-                        for index, (return_queue, idx) in memory.items()
-                    ]
-                    batch.clear()
-                    memory.clear()
-
-        # except:
-        #    logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
-        #    batch_size = len(batch)
-        #    last_run_on_track = True
+                    if batch and memory:
+                        texts = self.core.analyse(batch=batch)
+                        logger.debug(f"{len(batch)}, {memory}, {texts}")
+                        [
+                            self.pass_queue.put_nowait(
+                                (texts[index], return_queue, idx)
+                            )
+                            for index, (return_queue, idx) in memory.items()
+                        ]
+                        batch.clear()
+                        memory.clear()
+            except:
+                logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
+                batch_size = len(batch)
+                last_run_on_track = True
 
     def __del__(self):
         del self.core
@@ -172,7 +171,7 @@ class CPUWorker:
 
             if not text:
                 continue
-            
+
             item = finished[index][0]
             item.text = text
             item.lang_estimate = combined
