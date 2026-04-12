@@ -288,7 +288,7 @@ def main():
                             description = progress_queue.get_nowait()
                             if description in tasks:
                                 task_id = tasks[description][0]
-                                progress.update(task_id=task_id, advance=1)
+                                progress.update(task_id=task_id, advance=1, visible=True)
 
                                 task = tasks[description][1]
                                 if task.finished:
