@@ -18,6 +18,8 @@ wheels/
 *.txt
 *.json
 *.svg
+*.html
+*.bin
 
 images
 tmp
