@@ -51,7 +51,7 @@ class OCRGPUWorker:
                         texts = self.core.analyse(batch=batch)
                         logger.debug(f"{len(batch)}, {memory}, {texts}")
                         [
-                            self.pass_queue.put_nowait(
+                            self.pass_queue.put(
                                 (texts[index], return_queue, idx)
                             )
                             for index, (return_queue, idx) in memory.items()
@@ -88,7 +88,7 @@ class LanguageGPUWorker:
 
             text = str(original_text).lower()
             combined = self.core.get_topk(text=text)
-            self.queues[return_queue].put_nowait((original_text, combined, idx))
+            self.queues[return_queue].put((original_text, combined, idx))
 
         logger.debug(Fore.MAGENTA + "LanguageGPUWorker ended" + Fore.RESET)
 
@@ -121,7 +121,7 @@ class CPUWorker:
         if not pgs_data:
             return False
 
-        self.task_queue.put_nowait(
+        self.task_queue.put(
             (
                 f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}",
                 len(pgs_data),
@@ -137,12 +137,12 @@ class CPUWorker:
             if test_width == 0 or test_height == 0:
                 continue
 
-            self.gpu_ocr_queue.put_nowait((image, queue_index, index))
+            self.gpu_ocr_queue.put((image, queue_index, index))
             finished[index] = item
 
         safety_check = []
         for index in finished.keys():
-            self.progress_queue.put_nowait(
+            self.progress_queue.put(
                 (
                     f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"
                 )
