@@ -45,13 +45,7 @@ class TimelineItem:
                 for display_obj in ds.ods_segments
                 if display_obj.id == self.comp_obj.object_id
             ]
-            self.display_obj = (
-                None
-                if not display_obj_cand
-                else display_obj_cand
-                if len(display_obj_cand) == 1
-                else display_obj_cand
-            )
+            self.display_obj = display_obj_cand
             self.palette = (
                 None if not ds.pds_segments else ds.pds_segments.pop().palettes
             )
