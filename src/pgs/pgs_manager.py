@@ -8,9 +8,9 @@ import hashlib
 import typing
 import shutil
 
+from PIL import Image, ImageOps
 from langcodes import Language
 from pymkv import MKVTrack
-from PIL import Image
 import numpy as np
 
 from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
@@ -35,7 +35,6 @@ class PgsManager:
         "mkv_track",
         "tmp_path",
         "pgs",
-        "fallback",
         "hash",
         "overwrite_if_exists",
         "dump_debug",
@@ -49,7 +48,6 @@ class PgsManager:
         self.mkv_track = mkv_track
         self.hash = hashlib.sha256(str(self.mkv_track).encode()).hexdigest()
         self.tmp_path = Path(f"{options['path_to_tmp']}/{self.hash}")
-        self.fallback = options["fallback"] if "fallback" in options else False
         self.overwrite_if_exists = (
             options["overwrite_if_exists"]
             if "overwrite_if_exists" in options
@@ -86,14 +84,31 @@ class PgsManager:
             image_path = Path(f"{path}/images")
             image_path.mkdir(parents=True, exist_ok=True)
             for index, item in enumerate(pgs_items):
-                image = Image.fromarray(item.image.data)
+                image = Image.fromarray(item.image.data).convert("RGB")
+                rgb = image.getpixel((0, 0))
+
+                color = "Black" if rgb == (0, 0, 0) else "White"
+                image = ImageOps.expand(image=image, border=10, fill=color)
+                image = ImageOps.invert(image)
                 image.save(f"{image_path.absolute()}/{index}.png")
 
             self.pgs.dump_display_sets(self.pgs.display_sets, path=str(path.absolute()))
 
         shutil.rmtree(path=self.tmp_path)
 
-        return [(Image.fromarray(item.image.data), item) for item in pgs_items]
+        final = []
+        for item in pgs_items:
+            # Expand border to ensure proper recognition if text is very close to image borders.
+            # Also invert as black-outline texts is saved inverted (as white-outline). This could help detection.
+            image = Image.fromarray(item.image.data).convert("RGB")
+            rgb = image.getpixel((0, 0))
+
+            color = "Black" if rgb == (0, 0, 0) else "White"
+            image = ImageOps.expand(image=image, border=10, fill=color)
+            image = ImageOps.invert(image)
+            final.append((image, item))
+
+        return final
 
     def __debug_vis_timelines(self, subtitle_groups: list[SubtitleGroup]):
         from datetime import datetime
@@ -251,13 +266,13 @@ class PgsManager:
         srt = SubRipFile(items=items)
 
         combined: list[list[tuple[str, typing.Any]]] = []
-        if not self.fallback:
-            for group in subtitle_groups:
-                for timeline in group.timelines:
-                    [
-                        combined.append(item.lang_estimate)
-                        for item in list(chain.from_iterable(timeline.values()))
-                    ]
+
+        for group in subtitle_groups:
+            for timeline in group.timelines:
+                [
+                    combined.append(item.lang_estimate)
+                    for item in list(chain.from_iterable(timeline.values()))
+                ]
 
         track = self.mkv_track
         path = Path(track.file_path).name.replace(".mkv", "")
@@ -279,8 +294,7 @@ class PgsManager:
             average[label] = np.average(prob) * weights[label]
 
         final_lang = track.language_ietf if track.language_ietf is not None else ""
-        if not self.fallback:
-            final_lang = max(average, key=average.get)  # type: ignore
+        final_lang = max(average, key=average.get)  # type: ignore
 
         forced = True if track.forced_track or len(items) <= 150 else False
         path = path + ".sdh" if track.flag_hearing_impaired else ""

@@ -5,11 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: Default",
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Python Debugger: With options",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args":  ["-d", "-o", "-cw", "4", "-ow", "4", "-lw", "3", "-p", "/workspaces/sup-convert/smb/jellyfin/shows/Arcane (2021)"]
         }
     ]
 }
