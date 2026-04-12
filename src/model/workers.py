@@ -1,13 +1,15 @@
-from torch.multiprocessing import current_process, Queue
-from pgs.pgs_manager import PgsManager, PgsSubtitleItem
-from model.language_model_core import LanguageModelCore
-from model.ocr_model_core import OCRModelCore
 from dataclasses import dataclass
 from copy import deepcopy
-from colorama import Fore
 from pathlib import Path
 import logging
 import typing
+
+from torch.multiprocessing import current_process, Queue
+from colorama import Fore
+
+from pgs.pgs_manager import PgsManager, PgsSubtitleItem
+from model.language_model_core import LanguageModelCore
+from model.ocr_model_core import OCRModelCore
 
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from colorama import Fore
 import logging
-import torch
 import os
+
+from colorama import Fore
+
 
 # os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -10,8 +11,33 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 @dataclass
 class OCRModelCore:
+    def __init__(self, options={}):
+        pass
+
+    def analyse(self, batch: list) -> list[str]:
+        import pytesseract as tess
+
+        texts: list[str] = []
+        for entry in batch:
+            image = entry[0]["content"][0]["image"]
+            texts.append(tess.image_to_string(image=image))
+
+        return texts
+
+    def __del__(self):
+        del self
+
+
+import torch  # noqa: E402
+
+from src.utils.torch_utils import check_torch_cuda  # noqa: E402
+
+
+@dataclass
+class PaddleModelCore(OCRModelCore):
     __slots__ = ("model", "processor", "torch_device")
 
     def __init__(
@@ -21,6 +47,7 @@ class OCRModelCore:
     ):
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
+        options = check_torch_cuda(options=options)
         self.torch_device = options["torch_device"]
 
         attn_implementation = "flash_attention_2"
@@ -74,22 +101,3 @@ class OCRModelCore:
     def __del__(self):
         del self.model
         del self.processor
-
-
-@dataclass
-class TesseractCore(OCRModelCore):
-    def __init__(self, options={}):
-        pass
-
-    def analyse(self, batch: list) -> list[str]:
-        import pytesseract as tess
-
-        texts: list[str] = []
-        for entry in batch:
-            image = entry[0]["content"][0]["image"]
-            texts.append(tess.image_to_string(image=image))
-
-        return texts
-
-    def __del__(self):
-        del self

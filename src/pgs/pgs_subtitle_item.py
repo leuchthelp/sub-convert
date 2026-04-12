@@ -1,11 +1,12 @@
+import logging
+import typing
+
 from pgs.pgs_segments import (
     PgsImage,
     ObjectDefinitionSegment,
     Palette,
     PresentationCompositionSegment,
 )
-import logging
-import typing
 
 
 logger = logging.getLogger(__name__)

@@ -1,9 +1,11 @@
-from pgs.pgs_manager import PgsManager
 from dataclasses import dataclass
-from pymkv import MKVFile
 from pathlib import Path
 import logging
 import typing
+
+from pymkv import MKVFile
+
+from pgs.pgs_manager import PgsManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

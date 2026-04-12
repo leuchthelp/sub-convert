@@ -1,8 +1,13 @@
-from torch.multiprocessing import Process, Manager, Pool, set_start_method
-from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
-from src.subtitle.subtitle_track_manager import SubtitleTrackManager
-from model import ocr_model_core, language_model_core
 from itertools import chain
+from pathlib import Path
+import importlib
+import argparse
+import inspect
+import logging
+import os
+
+
+from torch.multiprocessing import Process, Manager, Pool, set_start_method
 from rich.progress import (
     Progress,
     TextColumn,
@@ -13,13 +18,11 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.progress import TaskID, Task
-from pathlib import Path
-import importlib
-import argparse
-import inspect
-import logging
-import torch
-import os
+
+
+from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
+from src.subtitle.subtitle_track_manager import SubtitleTrackManager
+from src.model import ocr_model_core, language_model_core
 
 
 logging.basicConfig(
@@ -80,14 +83,14 @@ def main():
         "-om",
         "--ocr_model_core",
         choices=ocr_classes,
-        default="TesseractCore",
+        default="OCRModelCore",
         help="List all options within the ocr_model_core.py with are the possible OCRModelCores to choose from.",
     )
     parser.add_argument(
         "-lm",
         "--language_model_core",
         choices=lang_classes,
-        default="LinguaCore",
+        default="LanguageModelCore",
         help="List all options within the language_model_core.py with are the possible LanguageModelCores to choose from.",
     )
     parser.add_argument(
@@ -167,21 +170,6 @@ def main():
             for path in convertibles
         )
     )
-
-    # Setup basic options relating to pytorch and set environmental variables if needed
-
-    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-    if torch_device == "cuda":
-        # Check for working rocm and activate flash attention, otherwise its NVIDIA
-        if torch.version.hip is not None:
-            os.environ["FLASH_ATTENTION_TRITON_AMD_ENABLE"] = "TRUE"
-            # os.environ["FLASH_ATTENTION_TRITON_AMD_AUTOTUNE"] = "TRUE"
-
-    if torch.xpu.is_available():
-        options["intel_disable_flash"] = True
-        torch_device = "xpu"
-
-    options["torch_device"] = torch_device
 
     # Setup ocr prompt and message template
     ocr_task = "ocr"
