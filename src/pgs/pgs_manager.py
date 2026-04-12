@@ -1,22 +1,24 @@
-from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
-from pysrt import SubRipFile, SubRipItem, SubRipTime
-from pgs.pgs_subtitle_item import PgsSubtitleItem
 from dataclasses import dataclass
 from collections import Counter
-from langcodes import Language
 from dateutil import parser
 from itertools import chain
-from pymkv import MKVTrack
 from pathlib import Path
-from PIL import Image
-import plotly.express as px
-import pandas as pd
-import numpy as np
 import subprocess
 import logging
 import hashlib
 import typing
 import shutil
+
+from langcodes import Language
+from pymkv import MKVTrack
+from PIL import Image
+import plotly.express as px
+import pandas as pd
+import numpy as np
+
+from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
+from pysrt import SubRipFile, SubRipItem, SubRipTime
+from pgs.pgs_subtitle_item import PgsSubtitleItem
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +82,9 @@ class PgsManager:
             debug_path = Path("debug")
             debug_path.mkdir(parents=True, exist_ok=True)
 
-            path = Path(f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}")
+            path = Path(
+                f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}"
+            )
 
             image_path = Path(f"{path}/images")
             image_path.mkdir(parents=True, exist_ok=True)
@@ -125,7 +129,9 @@ class PgsManager:
         debug_path = Path("debug")
         debug_path.mkdir(parents=True, exist_ok=True)
 
-        path = Path(f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}")
+        path = Path(
+            f"{debug_path}/{self.hash[0:6]}-{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}"
+        )
         path.mkdir(parents=True, exist_ok=True)
         df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
         fig.write_image(f"{path.absolute()}/quickview-{self.hash[0:6]}.svg")

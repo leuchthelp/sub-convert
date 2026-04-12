@@ -1,12 +1,15 @@
-from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
-from pgs.pgs_segments import PgsReader, DisplaySet
 from dataclasses import dataclass
-from pysrt import SubRipTime
 from itertools import chain
 import logging
 import typing
-import json
 import os
+
+from pysrt import SubRipTime
+import json
+
+from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
+from pgs.pgs_segments import PgsReader, DisplaySet
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -364,9 +367,9 @@ class Pgs:
                 groups.append(tmp)
                 tmp = []
 
-        #test_groups = list(range(100, 112))
-        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        # test_groups = list(range(100, 112))
+        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
         self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
