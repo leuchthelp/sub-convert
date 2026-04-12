@@ -273,7 +273,7 @@ def main():
                 for _ in pool.imap_unordered(runnable.run, pgs_managers):
                     end = False
                     while not end:
-                        if not task_queue.empty():
+                        try:
                             description, total = task_queue.get_nowait()
                             task_id = progress.add_task(
                                 description=description, total=total, visible=True
@@ -281,8 +281,10 @@ def main():
 
                             task = progress.tasks[task_id]
                             tasks[description] = (task_id, task)
+                        except:
+                            pass
 
-                        if not progress_queue.empty():
+                        try:
                             description = progress_queue.get_nowait()
                             if description in tasks:
                                 task_id = tasks[description][0]
@@ -293,6 +295,8 @@ def main():
                                     progress.update(
                                         task_id=task.id, refresh=True, visible=False
                                     )
+                        except:
+                            pass
 
                         # There should at least be a couple of tasks present, before we consider our progress finished.
                         # Otherwise if the tool is tool slow, it will immidiately end the update loop
