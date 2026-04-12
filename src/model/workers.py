@@ -51,9 +51,7 @@ class OCRGPUWorker:
                         texts = self.core.analyse(batch=batch)
                         logger.debug(f"{len(batch)}, {memory}, {texts}")
                         [
-                            self.pass_queue.put(
-                                (texts[index], return_queue, idx)
-                            )
+                            self.pass_queue.put((texts[index], return_queue, idx))
                             for index, (return_queue, idx) in memory.items()
                         ]
                         batch.clear()
@@ -142,14 +140,14 @@ class CPUWorker:
 
         safety_check = []
         for index in finished.keys():
+            combined: list[tuple[str, typing.Any]] = []
+            text, combined, index = return_queue.get()
+
             self.progress_queue.put(
                 (
                     f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"
                 )
             )
-
-            combined: list[tuple[str, typing.Any]] = []
-            text, combined, index = return_queue.get()
 
             if not text:
                 continue
