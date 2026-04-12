@@ -114,7 +114,7 @@ def main():
     )
 
     parser.add_argument(
-        "-c",
+        "-cw",
         "--cpu_workers",
         type=int,
         default=2,
