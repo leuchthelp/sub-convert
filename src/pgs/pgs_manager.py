@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from collections import Counter
-from dateutil import parser
 from itertools import chain
 from pathlib import Path
 import subprocess
@@ -97,6 +96,8 @@ class PgsManager:
         return [(Image.fromarray(item.image.data), item) for item in pgs_items]
 
     def __debug_vis_timelines(self, subtitle_groups: list[SubtitleGroup]):
+        from datetime import datetime
+
         import plotly.express as px
         import pandas as pd
 
@@ -105,10 +106,11 @@ class PgsManager:
         for group in subtitle_groups:
             for timeline in group.timelines:
                 for item in list(chain.from_iterable(timeline.values())):
+                    format = "%H:%M:%S,%f"
                     tmp = pd.DataFrame(
                         data={
-                            "start": [str(parser.parse(str(item.start)))],
-                            "end": [str(parser.parse(str(item.end)))],
+                            "start": [datetime.strptime(str(item.start), format)],
+                            "end": [datetime.strptime(str(item.end), format)],
                             "placement": [item.position],
                             "text": [item.text],
                         },
@@ -125,6 +127,10 @@ class PgsManager:
             hover_name="text",
             hover_data="text",
             color="placement",
+            color_discrete_map={
+                "Top": "#AB029E",
+                "Bottom": "#FF4430",
+            },
         )
 
         debug_path = Path("debug")
