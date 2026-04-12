@@ -23,7 +23,14 @@ class OCRModelCore:
         texts: list[str] = []
         for entry in batch:
             image = entry[0]["content"][0]["image"]
-            texts.append(tess.image_to_string(image=image))
+            text = tess.image_to_string(
+                image=image, config="--oem 1 -l eng+deu+deu_frak+deu_latf+jpn"
+            )
+
+            # Small static fix for tesseract, might want to make this togglable in the future.
+            # But realistically how often will | be used in subtitles?
+            text = str(text).replace("|", "I")
+            texts.append(text)
 
         return texts
 

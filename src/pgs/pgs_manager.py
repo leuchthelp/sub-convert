@@ -12,8 +12,6 @@ import shutil
 from langcodes import Language
 from pymkv import MKVTrack
 from PIL import Image
-import plotly.express as px
-import pandas as pd
 import numpy as np
 
 from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
@@ -99,6 +97,9 @@ class PgsManager:
         return [(Image.fromarray(item.image.data), item) for item in pgs_items]
 
     def __debug_vis_timelines(self, subtitle_groups: list[SubtitleGroup]):
+        import plotly.express as px
+        import pandas as pd
+
         df = pd.DataFrame()
 
         for group in subtitle_groups:
