@@ -121,11 +121,6 @@ class CPUWorker:
         if not pgs_data:
             return False
 
-        logger.debug(
-            Fore.MAGENTA
-            + f"Got to do {len(pgs_data)} items for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id} on {current_process()}"
-            + Fore.RESET
-        )
         self.task_queue.put_nowait(
             (
                 f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}",
@@ -136,22 +131,16 @@ class CPUWorker:
         queue_index = current_process().name.split("-")[1]
         return_queue = self.queues[f"{queue_index}"]
 
-        logger.debug(
-            Fore.LIGHTYELLOW_EX
-            + f"{queue_index} got queue: {return_queue}"
-            + Fore.RESET
-        )
         finished: dict[int, PgsSubtitleItem] = {}
         for index, (image, item) in enumerate(pgs_data):
             test_width, test_height = image.size
             if test_width == 0 or test_height == 0:
                 continue
 
-            image = image.convert("RGB")
-            text = ""
             self.gpu_ocr_queue.put_nowait((image, queue_index, index))
             finished[index] = item
 
+        safety_check = []
         for index in finished.keys():
             self.progress_queue.put_nowait(
                 (
@@ -168,11 +157,10 @@ class CPUWorker:
             item = finished[index]
             item.text = text
             item.lang_estimate = combined
+            safety_check.append(index)
 
-        logger.debug(
-            Fore.GREEN
-            + f"Finished extracting and classifying for {pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}!"
-            + Fore.RESET
-        )
+        if not safety_check:
+            return False
+
         pgs_manager.save_file()
         return True
