@@ -3,6 +3,7 @@ import pytest
 
 from pathlib import Path
 
+from src.model import ocr_model_core, language_model_core
 from main import (
     check_if_adjacent_exists,
     check_aged,
@@ -108,7 +109,7 @@ def test_get_candidates_inputs(input, expectation):
 )
 def test_get_candidates_results(input, needed, expectation):
     tmp = list(get_candidates(Path("tests/files/for-main"), options=input))
-    
+
     if not tmp:
         assert len(tmp) == len(needed)
 
@@ -120,3 +121,29 @@ def test_get_candidates_results(input, needed, expectation):
 
     for res in tmp:
         assert is_in_substring(needed) is expectation
+
+
+@pytest.mark.parametrize(
+    "input, needed, expectation",
+    [
+        (ocr_model_core, ["OCRModelCore", "PaddleModelCore"], True),
+        (language_model_core, ["LanguageModelCore", "LangDetectModelCore"], True),
+        (ocr_model_core, ["LanguageModelCore", "LangDetectModelCore"], False),
+        (language_model_core, ["OCRModelCore", "PaddleModelCore"], False),
+    ],
+)
+def test_get_classes_inputs(input, needed, expectation):
+    tmp = get_classes(input)
+
+    assert bool(set(needed).intersection(tmp)) is expectation
+
+
+def test_import_class_inputs():
+    assert import_class("OCRModelCore", ocr_model_core.__name__)(options={})
+    assert import_class("LanguageModelCore", language_model_core.__name__)(options={})
+
+
+def test_import_class_invalid_inputs():
+    with pytest.raises(AttributeError):
+        assert import_class("OCRModelSchmore", ocr_model_core.__name__)(options={})
+        assert import_class("LanguageModelSchmore", language_model_core.__name__)(options={})

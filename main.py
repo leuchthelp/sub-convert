@@ -113,7 +113,7 @@ def get_candidates(root: Path, options: dict):
                 yield file.absolute()
 
 
-def get_classes(module):
+def get_classes(module) -> list[str]:
     return [
         cls.__name__
         for _, cls in inspect.getmembers(module, inspect.isclass)

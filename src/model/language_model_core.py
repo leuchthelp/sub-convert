@@ -6,7 +6,7 @@ import os
 from colorama import Fore
 
 
-# os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 logger = logging.getLogger(__name__)
