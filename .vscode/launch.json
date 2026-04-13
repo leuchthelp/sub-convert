@@ -25,7 +25,15 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args":  ["-a", "m+5"]
+            "args":  ["-a", "s+1", "-s"]
+        },
+        {
+            "name": "Python Debugger: Adjacent files check",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args":  ["-s"]
         }
     ]
 }

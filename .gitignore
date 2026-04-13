@@ -28,3 +28,6 @@ results
 smb
 cached_models
 image-test
+!tests/files/for-main/test-adjacent-exists.mkv
+!tests/files/for-main/test-adjacent-exists.srt
+!tests/files/for-main/test-no-adjacent.mkv
