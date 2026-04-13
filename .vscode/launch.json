@@ -18,6 +18,14 @@
             "program": "main.py",
             "console": "integratedTerminal",
             "args":  ["-d", "-o", "-cw", "4", "-ow", "4", "-lw", "3", "-p", "/workspaces/sup-convert/smb/jellyfin/shows/Arcane (2021)"]
+        },
+        {
+            "name": "Python Debugger: Older/younger check",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args":  ["-a", "m+5"]
         }
     ]
 }

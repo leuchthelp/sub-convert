@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 import importlib
@@ -5,6 +6,7 @@ import argparse
 import inspect
 import logging
 import os
+import re
 
 
 from torch.multiprocessing import Process, Manager, Pool, set_start_method
@@ -39,8 +41,53 @@ def check_if_adjacent_exists(path: Path) -> bool:
         logger.debug(
             f"{tmp_name} is in {file.name}: {tmp_name in file.name and path.name != file.name}?"
         )
-        if tmp_name in file.name and path.name != file.name:
+        if tmp_name in file.name and ".srt" in file.name and path.name != file.name:
             return True
+    return False
+
+
+def check_aged(path: Path, offset: str) -> bool:
+    for file in Path(path.parent).glob("*"):
+        tmp_name = str(path.name).replace(".mkv", "")
+        tmp = re.split("(\\W)", offset)
+
+        delta = "d"
+        try:
+            if len(tmp) < 2:
+                int_offset = int(tmp[0])
+            elif len(tmp) == 2:
+                int_offset = int(tmp[0] + tmp[1])
+            else:
+                delta = tmp[0]
+                int_offset = int(tmp[1] + tmp[2])
+        except:
+            raise ValueError(
+                f"Incorrect usage of -S, --skip_aged argument. {tmp} is not an integer value. At least positive integer value is necessary!"
+            )
+
+        cutoff = datetime.now()
+        match delta:
+            case w if w in ["s", "S", "second", "Second", "seconds", "Seconds"]:
+                cutoff = datetime.now() - timedelta(seconds=abs(int_offset))
+            case w if w in ["m", "minute", "Minute", "minutes", "Minutes"]:
+                cutoff = datetime.now() - timedelta(minutes=abs(int_offset))
+            case w if w in ["h", "H", "hour", "Hour", "hours", "Hours"]:
+                cutoff = datetime.now() - timedelta(hours=abs(int_offset))
+            case w if w in ["d", "D", "day", "Day", "days", "Days"]:
+                cutoff = datetime.now() - timedelta(days=abs(int_offset))
+            case w if w in ["w", "W", "week", "Week", "weeks", "Weeks"]:
+                cutoff = datetime.now() - timedelta(days=abs(int_offset))
+            case w if w in ["M", "month", "Month", "months", "Months"]:
+                cutoff = datetime.now() - timedelta(days=abs(int_offset * 30))
+            case w if w in ["y", "Y", "year", "Year", "years", "Years"]:
+                cutoff = datetime.now() - timedelta(days=abs(int_offset * 365))
+
+        if tmp_name in file.name and ".srt" in file.name:
+            file_age = datetime.fromtimestamp(file.stat().st_mtime)
+            if int_offset > 0 and file_age < cutoff:
+                return True
+            elif int_offset < 0 and file_age > cutoff:
+                return True
     return False
 
 
@@ -50,8 +97,18 @@ def get_candidates(root: Path, options: dict):
 
     for file in root.rglob("*.mkv"):
         if file.is_file():
-            if options["skip_if_existing"]:
+            if options["convert_aged"] and options["skip_if_existing"]:
+                if not check_if_adjacent_exists(path=file) and check_aged(
+                    path=file, offset=options["convert_aged"]
+                ):
+                    yield file.absolute()
+
+            elif options["skip_if_existing"]:
                 if not check_if_adjacent_exists(path=file):
+                    yield file.absolute()
+
+            elif options["convert_aged"]:
+                if check_aged(path=file, offset=options["convert_aged"]):
                     yield file.absolute()
             else:
                 yield file.absolute()
@@ -112,7 +169,13 @@ def main():
         action="store_true",
         help="Skip extracting and converting tracks if adjacent .srt track for file exist. Default: False",
     )
-
+    parser.add_argument(
+        "-a",
+        "--convert_aged",
+        type=str,
+        default="",
+        help='Extracting and converting tracks if older(+)/younger(-) than amount of offset from current date specified. Given as str i.e. H+8 - process older than 8 hours. Default: "", means nothing will be skipped.',
+    )
     parser.add_argument(
         "-cw",
         "--cpu_workers",
@@ -157,6 +220,7 @@ def main():
         "path_to_tmp": "tmp",
         "overwrite_if_exists": args.overwrite,
         "skip_if_existing": args.skip_if_exists,
+        "convert_aged": args.convert_aged,
         "dump_debug": args.dump_debug,
     }
 
@@ -288,7 +352,9 @@ def main():
                             description = progress_queue.get_nowait()
                             if description in tasks:
                                 task_id = tasks[description][0]
-                                progress.update(task_id=task_id, advance=1, visible=True)
+                                progress.update(
+                                    task_id=task_id, advance=1, visible=True
+                                )
 
                                 task = tasks[description][1]
                                 if task.finished:
