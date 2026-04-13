@@ -36,59 +36,59 @@ logger.setLevel(logging.INFO)
 
 
 def check_if_adjacent_exists(path: Path) -> bool:
-    for file in Path(path.parent).glob("*"):
-        tmp_name = str(path.name).replace(".mkv", "")
-        logger.debug(
-            f"{tmp_name} is in {file.name}: {tmp_name in file.name and path.name != file.name}?"
-        )
-        if tmp_name in file.name and ".srt" in file.name and path.name != file.name:
+    tmp_name = str(path.name).replace(".mkv", "")
+
+    for file in Path(path.parent).glob("*.srt"):
+        if tmp_name in file.name:
             return True
     return False
 
 
 def check_aged(path: Path, offset: str) -> bool:
-    for file in Path(path.parent).glob("*"):
-        tmp_name = str(path.name).replace(".mkv", "")
-        tmp = re.split("(\\W)", offset)
+    tmp = re.split("(\\W)", offset)
 
-        delta = "d"
-        try:
-            if len(tmp) < 2:
-                int_offset = int(tmp[0])
-            elif len(tmp) == 2:
-                int_offset = int(tmp[0] + tmp[1])
-            else:
+    delta = "h"
+    try:
+        if len(tmp) < 2:
+            int_offset = int(tmp[0])
+        else:
+            if tmp[0]:
                 delta = tmp[0]
-                int_offset = int(tmp[1] + tmp[2])
-        except:
-            raise ValueError(
-                f"Incorrect usage of -S, --skip_aged argument. {tmp} is not an integer value. At least positive integer value is necessary!"
-            )
+            int_offset = int(tmp[1] + tmp[2])
+    except:
+        raise ValueError(
+            f"Incorrect usage of -S, --skip_aged argument. {tmp} is not an integer value. At least positive integer value is necessary!"
+        )
 
-        cutoff = datetime.now()
-        match delta:
-            case w if w in ["s", "S", "second", "Second", "seconds", "Seconds"]:
-                cutoff = datetime.now() - timedelta(seconds=abs(int_offset))
-            case w if w in ["m", "minute", "Minute", "minutes", "Minutes"]:
-                cutoff = datetime.now() - timedelta(minutes=abs(int_offset))
-            case w if w in ["h", "H", "hour", "Hour", "hours", "Hours"]:
-                cutoff = datetime.now() - timedelta(hours=abs(int_offset))
-            case w if w in ["d", "D", "day", "Day", "days", "Days"]:
-                cutoff = datetime.now() - timedelta(days=abs(int_offset))
-            case w if w in ["w", "W", "week", "Week", "weeks", "Weeks"]:
-                cutoff = datetime.now() - timedelta(days=abs(int_offset))
-            case w if w in ["M", "month", "Month", "months", "Months"]:
-                cutoff = datetime.now() - timedelta(days=abs(int_offset * 30))
-            case w if w in ["y", "Y", "year", "Year", "years", "Years"]:
-                cutoff = datetime.now() - timedelta(days=abs(int_offset * 365))
+    cutoff = datetime.now()
+    match delta:
+        case w if w in ["s", "S", "second", "Second", "seconds", "Seconds"]:
+            cutoff = datetime.now() - timedelta(seconds=abs(int_offset))
+        case w if w in ["m", "minute", "Minute", "minutes", "Minutes"]:
+            cutoff = datetime.now() - timedelta(minutes=abs(int_offset))
+        case w if w in ["h", "H", "hour", "Hour", "hours", "Hours"]:
+            cutoff = datetime.now() - timedelta(hours=abs(int_offset))
+        case w if w in ["d", "D", "day", "Day", "days", "Days"]:
+            cutoff = datetime.now() - timedelta(days=abs(int_offset))
+        case w if w in ["w", "W", "week", "Week", "weeks", "Weeks"]:
+            cutoff = datetime.now() - timedelta(days=abs(int_offset))
+        case w if w in ["M", "month", "Month", "months", "Months"]:
+            cutoff = datetime.now() - timedelta(days=abs(int_offset * 30))
+        case w if w in ["y", "Y", "year", "Year", "years", "Years"]:
+            cutoff = datetime.now() - timedelta(days=abs(int_offset * 365))
 
-        if tmp_name in file.name and ".srt" in file.name:
+
+    tmp_name = str(path.name).replace(".mkv", "")
+    for file in Path(path.parent).glob("*.srt"):
+        if tmp_name in file.name:
             file_age = datetime.fromtimestamp(file.stat().st_mtime)
             if int_offset > 0 and file_age < cutoff:
                 return True
             elif int_offset < 0 and file_age > cutoff:
                 return True
-    return False
+            else:
+                return False
+    return True
 
 
 def get_candidates(root: Path, options: dict):
@@ -154,7 +154,7 @@ def main():
         "-p",
         "--path",
         type=str,
-        default="test-files",
+        default="files",
         help="Directory path to .mkv files. Will recursively scan subdirectories.",
     )
     parser.add_argument(
