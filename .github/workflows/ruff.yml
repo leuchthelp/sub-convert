@@ -1,4 +1,4 @@
-name: Pylint
+name: ruff
 
 on: [push]
 
@@ -17,7 +17,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
-    - name: Analysing the code with pylint
+        pip install ruff pytest
+    - name: Analysing the code with ruff
       run: |
-        pylint $(git ls-files '*.py') --fail-under 8.5
+        ruff check --target-version py313 --fix
+        ruff check --target-version py314 --fix
+        pytest tests/

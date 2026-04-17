@@ -1,7 +1,7 @@
 from contextlib import nullcontext as does_not_raise
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from src.model import ocr_model_core, language_model_core
 from main import (
@@ -27,7 +27,7 @@ def test_check_aged_neg_offset():
 
 
 @pytest.mark.parametrize(
-    "input, expectation",
+    "input1, expectation",
     [
         ("1", does_not_raise()),
         ("+1", does_not_raise()),
@@ -42,10 +42,10 @@ def test_check_aged_neg_offset():
         ("h1-", pytest.raises(ValueError)),
     ],
 )
-def test_check_aged_inputs(input, expectation):
+def test_check_aged_inputs(input1, expectation):
     path = Path("tests/files/for-main/test-adjacent-exists.srt")
     with expectation:
-        check_aged(path, offset=input)
+        check_aged(path, offset=input1)
 
 
 def test_check_if_adjacent_exists():
@@ -56,7 +56,7 @@ def test_check_if_adjacent_exists():
 
 
 @pytest.mark.parametrize(
-    "input, expectation",
+    "input1, expectation",
     [
         ({"skip_if_existing": False, "convert_aged": ""}, does_not_raise()),
         ({"skip_if_existing": False, "convert_aged": "s+1"}, does_not_raise()),
@@ -66,13 +66,13 @@ def test_check_if_adjacent_exists():
         ({}, pytest.raises(KeyError)),
     ],
 )
-def test_get_candidates_inputs(input, expectation):
+def test_get_candidates_inputs(input1, expectation):
     with expectation:
-        list(get_candidates(Path("tests/files/for-main"), options=input))
+        list(get_candidates(Path("tests/files/for-main"), options=input1))
 
 
 @pytest.mark.parametrize(
-    "input, needed, expectation",
+    "input1, needed, expectation",
     [
         (
             {"skip_if_existing": False, "convert_aged": ""},
@@ -107,8 +107,8 @@ def test_get_candidates_inputs(input, expectation):
         ),
     ],
 )
-def test_get_candidates_results(input, needed, expectation):
-    tmp = list(get_candidates(Path("tests/files/for-main"), options=input))
+def test_get_candidates_results(input1, needed, expectation):
+    tmp = list(get_candidates(Path("tests/files/for-main"), options=input1))
 
     if not tmp:
         assert len(tmp) == len(needed)
@@ -124,7 +124,7 @@ def test_get_candidates_results(input, needed, expectation):
 
 
 @pytest.mark.parametrize(
-    "input, needed, expectation",
+    "input1, needed, expectation",
     [
         (ocr_model_core, ["OCRModelCore", "PaddleModelCore"], True),
         (language_model_core, ["LanguageModelCore", "LangDetectModelCore"], True),
@@ -132,8 +132,8 @@ def test_get_candidates_results(input, needed, expectation):
         (language_model_core, ["OCRModelCore", "PaddleModelCore"], False),
     ],
 )
-def test_get_classes_inputs(input, needed, expectation):
-    tmp = get_classes(input)
+def test_get_classes_inputs(input1, needed, expectation):
+    tmp = get_classes(input1)
 
     assert bool(set(needed).intersection(tmp)) is expectation
 
@@ -146,4 +146,6 @@ def test_import_class_inputs():
 def test_import_class_invalid_inputs():
     with pytest.raises(AttributeError):
         assert import_class("OCRModelSchmore", ocr_model_core.__name__)(options={})
-        assert import_class("LanguageModelSchmore", language_model_core.__name__)(options={})
+        assert import_class("LanguageModelSchmore", language_model_core.__name__)(
+            options={}
+        )
