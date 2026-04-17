@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import logging
 import os
 
-#os.environ['TRANSFORMERS_OFFLINE'] = '1'
+# os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,6 @@ class PaddleModelCore(OCRModelCore):
         attn_implementation = "paged|sdpa"
         if find_spec("flash_attn") is not None:
             attn_implementation = "flash_attention_2"
-
 
         self.model = (
             AutoModelForImageTextToText.from_pretrained(

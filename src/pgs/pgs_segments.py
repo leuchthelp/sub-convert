@@ -156,7 +156,7 @@ class PgsImage:
 
 
 class BaseSegment:
-    ("raw")
+    "raw"
 
     def __init__(self, b: bytes):
         self.raw = b
@@ -362,7 +362,7 @@ class WindowDefinitionSegment(BaseSegment):
 
 
 class PaletteDefinitionSegment(BaseSegment):
-    ("palettes")
+    "palettes"
 
     def __init__(self, b: bytes):
         super().__init__(b)
