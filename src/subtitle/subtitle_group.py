@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from itertools import chain
 import logging
 import typing
+import json
 import os
 
 from pysrt import SubRipTime
-import json
 
 from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
 from pgs.pgs_segments import PgsReader, DisplaySet
@@ -23,7 +23,6 @@ class TimelineItem:
         ds: DisplaySet | None = None,
         end: SubRipTime = SubRipTime(),
         window_id: int = -1,
-        index: int = 0,
     ):
         self.start = start
         self.end = end  # will be overwridden by the following TimelineItem item
@@ -35,7 +34,8 @@ class TimelineItem:
                 if comp_obj.window_id == window_id
             ].pop()
 
-            # Full screen coordiantes for PGS start in the top left; smaller offset = higher up | larger offset = lower down
+            # Full screen coordiantes for PGS start in the top left;
+            # smaller offset = higher up | larger offset = lower down
             self.position = (
                 "Top" if self.comp_obj.y_offset < ds.pcs.height / 2 else "Bottom"
             )
@@ -50,9 +50,7 @@ class TimelineItem:
                 None if not ds.pds_segments else ds.pds_segments.pop().palettes
             )
 
-        self.index = index
         self.pgs_subtitle_item: PgsSubtitleItem | None
-        self.associated_timestamp: list[SubRipTime] = []
         self.overlapping_with: list[TimelineItem] = []
         self.__placeholder: str
 
@@ -150,7 +148,7 @@ class SubtitleGroup:
                     )
                 )
         else:
-            tmp = self.__gen_timelines(members=members)
+            tmp = self.__gen_timelines(members=members, global_palettes=global_palettes)
             timelines.append(
                 self.__fix_endpoints(fixables=tmp, reset_statements=end, end=end)
             )
@@ -170,13 +168,15 @@ class SubtitleGroup:
         self, members: list[DisplaySet]
     ) -> dict[int, list[Palette]]:
         """
-        Grab all Palette defined at either EPOCH_START, ACQUISITION_POINT or intermediate with varying IDs.
+        Grab all Palette defined at either EPOCH_START, ACQUISITION_POINT or intermediate with
+        varying IDs.
 
         Returns
         -------
 
         list
-            Contains all Palettes found in the global Palette definition at ACQUISITION_POINT or intermediate with varying IDs
+            Contains all Palettes found in the global Palette definition at ACQUISITION_POINT
+            or intermediate with varying IDs
         """
         global_palettes: dict[int, list[Palette]] = {}
         for member in members:
@@ -187,15 +187,17 @@ class SubtitleGroup:
 
     def __find_reset_positions(self, members: list[DisplaySet]) -> list[int]:
         """
-        In PGS Files END segments are usually sized to 11 bytes, contain no objects & are placed at the end of the group.
-        However, if elements overlap an additional intermediate RESET segment is inserted which drops the number of objects
-        and marks the position a Palette update can happen and either new Elements can overlap or the overlap ends.
+        In PGS Files END segments are usually sized to 11 bytes, contain no objects
+        & are placed at the end of the group. However, if elements overlap an additional
+        intermediate RESET segment is inserted which drops the number of objects and marks the
+        position a Palette update can happen & either new Elements can overlap or the overlap ends.
 
         PGS subtitles can only show 2 objects on screen at once.
 
         This finds these positions.
 
-        They seem to always be marked with a size of 19 bytes and dropping the number of segments, which will always be 1.
+        They seem to always be marked with a size of 19 bytes and dropping the number of segments,
+        which will always be 1.
 
         Returns
         -------
@@ -233,14 +235,40 @@ class SubtitleGroup:
     ) -> dict[int, list[DisplaySet]]:
         overlapping: dict[int, list[DisplaySet]] = {}
 
-        for pos in range(len(reset_positions)):
+        for pos, reset in enumerate(reset_positions):
             start = redef_positions[pos]
-            stop = reset_positions[pos]
+            stop = reset
             overlapping[start] = members[start : stop + 1]
         return overlapping
 
+    def __process_timeline_item(
+        self,
+        new_timeline: TimelineItem,
+        timelines: dict[str, list[TimelineItem]],
+        ds: DisplaySet,
+        global_palettes: dict[int, list[Palette]],
+    ):
+        if new_timeline.position in timelines:
+            prev_timeline = timelines[new_timeline.position][-1]
+            prev_timeline.end = new_timeline.start
+
+            if new_timeline.comp_obj.object_id != prev_timeline.comp_obj.object_id:
+                if not new_timeline.palette:
+                    new_timeline.palette = prev_timeline.palette
+
+                if not new_timeline.display_obj:
+                    new_timeline.display_obj = prev_timeline.display_obj
+
+                timelines[new_timeline.position].append(new_timeline)
+        else:
+            if not new_timeline.palette:
+                new_timeline.palette = global_palettes[ds.pcs.palette_id]
+            timelines[new_timeline.position] = [new_timeline]
+
+        return timelines
+
     def __gen_timelines(
-        self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]] = {}
+        self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
     ) -> dict[str, list[TimelineItem]]:
         timelines: dict[str, list[TimelineItem]] = {}
 
@@ -253,32 +281,10 @@ class SubtitleGroup:
                             start=ds.pcs.presentation_timestamp,
                             ds=ds,
                         )
+                        timelines = self.__process_timeline_item(
+                            new_timeline, timelines, ds, global_palettes
+                        )
 
-                        if new_timeline.position in timelines:
-                            prev_timeline = timelines[new_timeline.position][-1]
-                            new_timeline.index = prev_timeline.index + 1
-
-                            prev_timeline.end = new_timeline.start
-                            prev_timeline.associated_timestamp.append(prev_timeline.end)
-
-                            if (
-                                new_timeline.comp_obj.object_id
-                                != prev_timeline.comp_obj.object_id
-                            ):
-                                if not new_timeline.palette:
-                                    new_timeline.palette = prev_timeline.palette
-
-                                if not new_timeline.display_obj:
-                                    new_timeline.display_obj = prev_timeline.display_obj
-
-                                timelines[new_timeline.position].append(new_timeline)
-                        else:
-                            if not new_timeline.palette:
-                                new_timeline.palette = global_palettes[
-                                    ds.pcs.palette_id
-                                ]
-                            new_timeline.associated_timestamp.append(new_timeline.start)
-                            timelines[new_timeline.position] = [new_timeline]
         return timelines
 
     def __fix_endpoints(
@@ -296,10 +302,8 @@ class SubtitleGroup:
                 != reset_statements.pcs.composition_objects[0].object_id
             ):
                 fixable.end = reset_statements.pcs.presentation_timestamp
-                fixable.associated_timestamp.append(fixable.end)
             else:
                 fixable.end = end.pcs.presentation_timestamp
-                fixable.associated_timestamp.append(fixable.end)
 
         return fixables
 
@@ -317,7 +321,7 @@ class SubtitleGroup:
 
 class Pgs:
     __slots__ = (
-        "data_reader",
+        "tmp_location",
         "temp_folder",
         "_items",
         "display_sets",
@@ -326,24 +330,28 @@ class Pgs:
 
     def __init__(
         self,
-        data_reader: typing.Callable[[], bytes],
+        tmp_location: str,
         temp_folder="tmp",
     ):
-        self.data_reader = data_reader
+        self.tmp_location = tmp_location
         self.temp_folder = temp_folder
         self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
+        self.display_sets = None
+        self.subtitle_groups = None
 
     @property
     def items(self) -> list[PgsSubtitleItem]:
         if self._items is None:
-            data = self.data_reader()
-            self._items = self.__decode(data)
+            with open(self.tmp_location, "+rb") as data:
+                self._items = self.__decode(data.read())
         return self._items
 
     def __decode(self, data: bytes) -> list[PgsSubtitleItem]:
         display_sets = list(PgsReader.decode(data))
         groups: typing.List[typing.List[DisplaySet]] = []
-        self.display_sets = display_sets
+
+        if self.display_sets is None:
+            self.display_sets = display_sets
 
         tmp = []
         for ds in display_sets:
@@ -395,7 +403,7 @@ class Pgs:
                 f,
                 indent=2,
                 ensure_ascii=False,
-                default=lambda x: str(x),
+                default=str,
             )
 
     def __repr__(self):
