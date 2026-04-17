@@ -49,15 +49,12 @@ class OCRGPUWorker:
 
                     if batch and memory:
                         texts = self.core.analyse(batch=batch)
-                        logger.debug(f"{len(batch)}, {memory}, {texts}")
-                        [
+                        for index, (return_queue, idx) in memory.items():
                             self.pass_queue.put((texts[index], return_queue, idx))
-                            for index, (return_queue, idx) in memory.items()
-                        ]
+
                         batch.clear()
                         memory.clear()
-            except:
-                logger.debug(Fore.MAGENTA + "Last track" + Fore.RESET)
+            except Exception:
                 batch_size = len(batch)
                 last_run_on_track = True
 
@@ -82,7 +79,6 @@ class LanguageGPUWorker:
         end = False
         while not end:
             original_text, return_queue, idx = self.pass_queue.get()
-            logger.debug(f"{original_text}, {return_queue}")
 
             text = str(original_text).lower()
             combined = self.core.get_topk(text=text)
@@ -106,7 +102,6 @@ class CPUWorker:
     def __init__(
         self,
         queues: dict[str, Queue],
-        options={},
     ):
         self.gpu_ocr_queue = queues["ocr_queue"]
         self.queues = queues
@@ -121,7 +116,11 @@ class CPUWorker:
 
         self.task_queue.put(
             (
-                f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}",
+                (
+                    f"[cyan]{pgs_manager.hash[0:6]}"
+                    + f"-{Path(pgs_manager.mkv_track.file_path).name}"
+                    + f"-{pgs_manager.mkv_track.track_id}"
+                ),
                 len(pgs_data),
             )
         )
@@ -139,13 +138,15 @@ class CPUWorker:
             finished[index] = item
 
         safety_check = []
-        for index in finished.keys():
+        for index in finished:
             combined: list[tuple[str, typing.Any]] = []
             text, combined, index = return_queue.get()
 
             self.progress_queue.put(
                 (
-                    f"[cyan]{pgs_manager.hash[0:6]}-{Path(pgs_manager.mkv_track.file_path).name}-{pgs_manager.mkv_track.track_id}"
+                    f"[cyan]{pgs_manager.hash[0:6]}"
+                    + f"-{Path(pgs_manager.mkv_track.file_path).name}"
+                    + f"-{pgs_manager.mkv_track.track_id}"
                 )
             )
 

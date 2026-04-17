@@ -1,12 +1,10 @@
+from importlib.util import find_spec
 from dataclasses import dataclass
 import logging
 import typing
 import os
 
-from colorama import Fore
-
-
-#os.environ['TRANSFORMERS_OFFLINE'] = '1'
+# os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 logger = logging.getLogger(__name__)
@@ -63,12 +61,13 @@ static_languages = [
 
 @dataclass
 class LanguageModelCore:
-    __slots__ = "detector"
+    __slots__ = ("detector", "options")
 
     def __init__(
         self,
-        options={},
+        options: dict,
     ):
+        self.options = options
         self.detector = None
 
     def __init_around_pickle(self):
@@ -109,10 +108,12 @@ class LangDetectModelCore(LanguageModelCore):
 
     def __init__(
         self,
+        options: dict,
         model_name="Mike0307/multilingual-e5-language-detection",
-        languages: list[str] = static_languages,
-        options={},
+        languages=None,
     ):
+        super().__init__(options=options)
+
         from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -124,9 +125,9 @@ class LangDetectModelCore(LanguageModelCore):
             options["torch_device"] if "torch_device" in options else "cpu"
         )
 
-        attn_implementation = "flash_attention_2"
-        if "intel_disable_flash" in options or self.torch_device == "cpu":
-            attn_implementation = "sdpa"
+        attn_implementation = "paged|sdpa"
+        if find_spec("flash_attn") is not None:
+            attn_implementation = "flash_attention_2"
 
         self.model = (
             AutoModelForSequenceClassification.from_pretrained(
@@ -141,6 +142,8 @@ class LangDetectModelCore(LanguageModelCore):
             .share_memory()
         )
 
+        if languages is None:
+            languages = static_languages
         self.languages = languages
 
     def __predict(self, text: str) -> torch.Tensor:
@@ -160,9 +163,6 @@ class LangDetectModelCore(LanguageModelCore):
 
         logits = outputs.logits
         probabilities = torch.nn.functional.softmax(logits, dim=1)
-
-        logger.debug(Fore.MAGENTA + f"probabilities: {probabilities}" + Fore.RESET)
-
         del logits, outputs, tokenized
 
         return probabilities
@@ -176,14 +176,7 @@ class LangDetectModelCore(LanguageModelCore):
         topk_indices = topk_indices.cpu().numpy()[0].tolist()
 
         topk_labels: list[str] = [self.languages[index] for index in topk_indices]
-
-        logger.debug(
-            Fore.MAGENTA
-            + f"top probilities: {topk_prob}, top labels: {topk_labels}"
-            + Fore.RESET
-        )
-
-        tmp = [(a, b) for a, b in zip(topk_labels, topk_prob)]
+        tmp = list(zip(topk_labels, topk_prob))
 
         del probabilities, topk_labels, topk_prob, topk_indices
 

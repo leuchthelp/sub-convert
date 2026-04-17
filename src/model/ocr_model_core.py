@@ -1,9 +1,7 @@
+from importlib.util import find_spec
 from dataclasses import dataclass
 import logging
 import os
-
-from colorama import Fore
-
 
 #os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -14,8 +12,8 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class OCRModelCore:
-    def __init__(self, options={}):
-        pass
+    def __init__(self, options: dict):
+        self.options = options
 
     def analyse(self, batch: list) -> list[str]:
         import pytesseract as tess
@@ -49,17 +47,20 @@ class PaddleModelCore(OCRModelCore):
 
     def __init__(
         self,
+        options: dict,
         model_name="PaddlePaddle/PaddleOCR-VL-1.5",
-        options={},
     ):
+        super().__init__(options=options)
+
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
         options = check_torch_cuda(options=options)
         self.torch_device = options["torch_device"]
 
-        attn_implementation = "flash_attention_2"
-        if "intel_disable_flash" in options or self.torch_device == "cpu":
-            attn_implementation = "sdpa"
+        attn_implementation = "paged|sdpa"
+        if find_spec("flash_attn") is not None:
+            attn_implementation = "flash_attention_2"
+
 
         self.model = (
             AutoModelForImageTextToText.from_pretrained(
@@ -100,9 +101,7 @@ class PaddleModelCore(OCRModelCore):
             clean_up_tokenization_spaces=False,
         )
 
-        logger.debug(Fore.CYAN + f"clean text: {texts}" + Fore.RESET)
         del inputs, generated_ids_trimmed, out
-
         return texts
 
     def __del__(self):

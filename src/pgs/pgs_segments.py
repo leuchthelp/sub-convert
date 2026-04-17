@@ -144,7 +144,7 @@ class PgsImage:
         third = safe_get(data, i + 2)
         if second < 128:
             return ((second - 64) << 8) + third, 0, 3
-        elif second < 192:
+        if second < 192:
             return second - 128, third, 3
 
         fourth = safe_get(data, i + 3)
@@ -156,7 +156,7 @@ class PgsImage:
 
 
 class BaseSegment:
-    __slots__ = "raw"
+    ("raw")
 
     def __init__(self, b: bytes):
         self.raw = b
@@ -362,7 +362,7 @@ class WindowDefinitionSegment(BaseSegment):
 
 
 class PaletteDefinitionSegment(BaseSegment):
-    __slots__ = "palettes"
+    ("palettes")
 
     def __init__(self, b: bytes):
         super().__init__(b)
@@ -404,16 +404,19 @@ class ObjectDefinitionSegment(BaseSegment):
     def data_len(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[4:7])
+        return None
 
     @property
     def width(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[7:9])
+        return None
 
     @property
     def height(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[9:11])
+        return None
 
     @property
     def img_data(self):
