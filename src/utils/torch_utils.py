@@ -17,6 +17,4 @@ def check_torch_cuda(options: dict[str, str | bool]) -> dict[str, str | bool]:
         torch_device = "xpu"
 
     options["torch_device"] = torch_device
-
-    check = options
-    return check
+    return options

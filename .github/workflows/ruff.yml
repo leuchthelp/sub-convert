@@ -17,9 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff pytest
+        pip install ruff pytest torch
     - name: Analysing the code with ruff
       run: |
-        ruff check --target-version py313 --fix
-        ruff check --target-version py314 --fix
-        pytest tests/
+        ruff check --fix

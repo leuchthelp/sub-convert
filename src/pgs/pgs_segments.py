@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import logging
 import typing
 import enum
@@ -452,6 +453,7 @@ SEGMENT_TYPE = {
 }
 
 
+@dataclass
 class DisplaySet:
     __slots__ = ("index", "segments")
 

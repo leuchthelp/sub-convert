@@ -319,6 +319,7 @@ class SubtitleGroup:
         return items
 
 
+@dataclass
 class Pgs:
     __slots__ = (
         "tmp_location",
@@ -335,7 +336,7 @@ class Pgs:
     ):
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
-        self._items: typing.Optional[typing.List[PgsSubtitleItem]] = None
+        self._items: typing.Optional[list[PgsSubtitleItem]] = None
         self.display_sets = None
         self.subtitle_groups = None
 
@@ -348,7 +349,7 @@ class Pgs:
 
     def __decode(self, data: bytes) -> list[PgsSubtitleItem]:
         display_sets = list(PgsReader.decode(data))
-        groups: typing.List[typing.List[DisplaySet]] = []
+        groups: list[list[DisplaySet]] = []
 
         if self.display_sets is None:
             self.display_sets = display_sets
@@ -381,7 +382,7 @@ class Pgs:
             )
         )
 
-    def dump_display_sets(self, display_sets: typing.List[DisplaySet], path=""):
+    def dump_display_sets(self, display_sets: list[DisplaySet], path=""):
         new_line = "\n"
 
         actual_path = self.temp_folder if not path else path
