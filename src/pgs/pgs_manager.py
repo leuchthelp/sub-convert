@@ -106,8 +106,9 @@ class PgsManager:
             image_path.mkdir(parents=True, exist_ok=True)
             for index, (image, item) in enumerate(final):
                 image.save(f"{image_path.absolute()}/{index}.png")
-
-            self.pgs.dump_display_sets(self.pgs.display_sets, path=str(path.absolute()))
+            
+            if self.pgs.display_sets is not None:
+                self.pgs.dump_display_sets(self.pgs.display_sets, path=str(path.absolute()))
 
         shutil.rmtree(path=self.tmp_path)
         return final
