@@ -320,12 +320,13 @@ class SubtitleGroup:
         redef_positions = []
         for index, ds in enumerate(members):
             if (
-                ds.pcs.size == 19
-                and ds.pcs.number_composition_objects == 1
+                ds.pcs.size in [19, 27]
+                and ds.pcs.number_composition_objects in [1, 2]
                 and ds.ods_segments
                 and ds.pds_segments
             ):
                 redef_positions.append(index)
+
         return redef_positions
 
     def __find_overlapping(
@@ -499,11 +500,7 @@ class Pgs:
         Only necessary for debugging. Directory where to dump the metadata. Defaults to \"tmp\"
     """
 
-    __slots__ = (
-        "tmp_location",
-        "temp_folder",
-        "_items",
-    )
+    __slots__ = ("tmp_location", "temp_folder", "_items", "subtitle_groups")
 
     def __init__(
         self,
@@ -545,8 +542,11 @@ class Pgs:
             the PGS image.
         """
         display_sets = list(PgsReader.decode(data))
-        groups: list[list[DisplaySet]] = []
 
+        if self.temp_folder != "tmp":
+            self.dump_display_sets(display_sets=display_sets)
+
+        groups: list[list[DisplaySet]] = []
         tmp = []
         for ds in display_sets:
             if ds.is_start() or (
@@ -565,12 +565,14 @@ class Pgs:
 
         # test_groups = list(range(100, 112))
         # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        # subtitle_groups = [SubtitleGroup(members=sliced)]
+        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
         return list(
-            chain.from_iterable([group.pgs_subtitle_items for group in subtitle_groups])
+            chain.from_iterable([
+                group.pgs_subtitle_items for group in self.subtitle_groups
+            ])
         )
 
     def dump_display_sets(self, display_sets: list[DisplaySet], path=""):
