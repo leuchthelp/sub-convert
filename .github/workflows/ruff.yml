@@ -17,7 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff pytest torch pysrt setuptools rich
+        pip install ruff pytest torch pysrt setuptools rich numpy
         pip install -e src/
     - name: Analysing the code with ruff
       run: |
