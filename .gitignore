@@ -33,3 +33,4 @@ image-test
 !tests/files/for-main/test-no-adjacent.mkv
 .cache
 site
+.pytest_cache
