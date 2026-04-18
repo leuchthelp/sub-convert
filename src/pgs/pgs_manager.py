@@ -73,8 +73,21 @@ class PgsManager:
             f"{self.mkv_track.track_id}:{tmp_file}",
         ]
 
+        path = Path("tmp")
+        if self.dump_debug:
+            debug_path = Path("debug")
+            debug_path.mkdir(parents=True, exist_ok=True)
+            path = Path(
+                (
+                    f"{debug_path}/{self.hash[0:6]}"
+                    + f"-{Path(self.mkv_track.file_path).name}"
+                    + f"-{self.mkv_track.track_id}"
+                )
+            ).absolute()
+            path.mkdir(parents=True, exist_ok=True)
+
         subprocess.check_output(cmd)
-        self.pgs = Pgs(tmp_location=tmp_file)
+        self.pgs = Pgs(tmp_location=tmp_file, temp_folder=str(path))
 
         pgs_items = self.pgs.items
 
@@ -92,25 +105,10 @@ class PgsManager:
             final.append((image, item))
 
         if self.dump_debug:
-            debug_path = Path("debug")
-            debug_path.mkdir(parents=True, exist_ok=True)
-            path = Path(
-                (
-                    f"{debug_path}/{self.hash[0:6]}"
-                    + f"-{Path(self.mkv_track.file_path).name}"
-                    + f"-{self.mkv_track.track_id}"
-                )
-            )
-
             image_path = Path(f"{path}/images")
             image_path.mkdir(parents=True, exist_ok=True)
             for index, (image, item) in enumerate(final):
-                image.save(f"{image_path.absolute()}/{index}.png")
-
-            if self.pgs.display_sets is not None:
-                self.pgs.dump_display_sets(
-                    self.pgs.display_sets, path=str(path.absolute())
-                )
+                image.save(f"{image_path}/{index}.png")
 
         shutil.rmtree(path=self.tmp_path)
         return final

@@ -10,6 +10,7 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
+            "args":  ["-d"]
         },
         {
             "name": "Python Debugger: With options",
@@ -17,7 +18,7 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args":  ["-d", "-o", "-cw", "4", "-ow", "4", "-lw", "3", "-p", "/workspaces/sup-convert/smb/jellyfin/shows/Arcane (2021)"]
+            "args":  ["-d", "-o", "-p", "smb/jellyfin/shows/Terror in Resonance (2014)"]
         },
         {
             "name": "Python Debugger: Older/younger check",
