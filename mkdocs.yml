@@ -1,0 +1,50 @@
+site_name: sub-convert
+repo_name: leuchthelp/sub-convert
+repo_url: https://github.com/leuchthelp/sub-convert
+site_description: Convert image-based subtitles to text-based via OCR and language recognition, trying to improve upon pgsrip 
+site_author: leuchthelp
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, 'https://sub-convert.readthedocs.io/']
+docs_dir: docs
+use_directory_urls: true
+
+nav:
+
+
+
+watch:
+  - components
+  - docs
+
+
+theme:
+  language: en
+  name: "material"
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.share
+
+
+plugins:
+  search:
+  autorefs:
+    link_titles: external
+  mkdocstrings:
+    handlers:
+      python:
+        options:
+          docstring_style: numpy
+  privacy:
+    links_attr_map:
+      target: _blank
+
+
+markdown_extensions:
+- attr_list
