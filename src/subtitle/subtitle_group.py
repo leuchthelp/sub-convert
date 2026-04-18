@@ -325,7 +325,6 @@ class Pgs:
         "tmp_location",
         "temp_folder",
         "_items",
-        "display_sets",
         "subtitle_groups",
     )
 
@@ -337,7 +336,6 @@ class Pgs:
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
         self._items: typing.Optional[list[PgsSubtitleItem]] = None
-        self.display_sets = None
         self.subtitle_groups = None
 
     @property
@@ -350,9 +348,6 @@ class Pgs:
     def __decode(self, data: bytes) -> list[PgsSubtitleItem]:
         display_sets = list(PgsReader.decode(data))
         groups: list[list[DisplaySet]] = []
-
-        if self.display_sets is None:
-            self.display_sets = display_sets
 
         tmp = []
         for ds in display_sets:
