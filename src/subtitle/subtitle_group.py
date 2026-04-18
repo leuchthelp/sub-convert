@@ -17,6 +17,25 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class TimelineItem:
+    """
+    An instance of TimelineItem describes an objects being displayed either
+    a Top or Bottom timeline within a PGS file.
+
+    A TimelineItem is effectively the text block being displayed on screen
+    for a set duration.
+
+    Parameters
+    ----------
+    start: SubRipTime
+        When the item starts being displayed.
+    ds: DisplaySet
+        DisplaySet associated with this item.
+    end: SubRipTime
+        When the item stops being displayed.
+    window_id: int
+        The Window the item is being displayed in within a PGS file.
+    """
+
     def __init__(
         self,
         start: SubRipTime,
@@ -55,6 +74,16 @@ class TimelineItem:
         self.__placeholder: str
 
     def gen_pgs_subtitle_item(self) -> PgsSubtitleItem:
+        """
+        Generates a PgsSubtitleItem described by the TimelineItems entry.
+        Contains the image and later text / language estimation of the text.
+
+        Returns
+        -------
+
+        PgsSubtitleItem
+            The PgsSubtitleItem which is displayed within this timeline slot.
+        """
         if self.display_obj is None or self.palette is None:
             raise ValueError
 
@@ -65,6 +94,15 @@ class TimelineItem:
 
     @property
     def text(self) -> str:
+        """
+        Returns text displayed within this timeline slot in a PGS file.
+
+        Returns
+        -------
+
+        str
+            Text displayed within this timeline slot in a PGS file.
+        """
         text: str
         try:
             text = (
@@ -77,10 +115,23 @@ class TimelineItem:
         return text
 
     def set_text(self, text: str):
+        """
+        Sets the text displayed within this timeline slot in a PGS file.
+        """
         self.__placeholder = text
 
     @property
     def lang_estimate(self) -> list[tuple[str, typing.Any]]:
+        """
+        Contains a list of languages and their probabilities matching
+        the text within a PgsSubtitleItem.
+
+        Returns
+        -------
+
+        list
+            Language estimation of the text.
+        """
         tmp: list[tuple[str, typing.Any]] = []
         try:
             tmp = (
@@ -94,6 +145,15 @@ class TimelineItem:
 
     @property
     def duration(self) -> SubRipTime:
+        """
+        Provides duration with which a given TimelineItem is being displayed.
+
+        Returns
+        -------
+
+        SubRipTime
+            Duration with which a given TimelineItem is being displayed.
+        """
         if self.end is None:
             raise ValueError("End has not been set yet.")
         return self.end - self.start
@@ -107,6 +167,21 @@ class TimelineItem:
 
 @dataclass
 class SubtitleGroup:
+    """
+    Defines an instance of a SubtitleGroup. A SubtitleGroup wraps around N DisplaySets
+    usually defining a START segment with the following segments defining more objects
+    to display until an END segment.
+
+    Within a group subtitles can overlap as PGS supports two windows displaying one image
+    each at a time. The current image is displayed until the window is updated with
+    another image.
+
+    Parameters
+    ----------
+    members: list
+        List of DisplaySets the SubtitleGroup wraps around.
+    """
+
     __slots__ = ("pgs_subtitle_items", "timelines", "overlap")
 
     def __init__(
@@ -159,6 +234,17 @@ class SubtitleGroup:
         )
 
     def __find_overlap(self, members: list[DisplaySet]) -> bool:
+        """
+        Check if the current set of DisplaySets between a POCH_START, ACQUISITION_POINT &
+        EndSegment have overlapping Windows. In PGS there can be at most two overlapping
+        Windows at a time.
+
+        Returns
+        -------
+
+        bool
+            Returns TRUE right away if there is any overlap found.
+        """
         for ds in members:
             if ds.pcs.number_composition_objects > 1:
                 return True
@@ -176,7 +262,7 @@ class SubtitleGroup:
 
         list
             Contains all Palettes found in the global Palette definition at ACQUISITION_POINT
-            or intermediate with varying IDs
+            or intermediate with varying IDs.
         """
         global_palettes: dict[int, list[Palette]] = {}
         for member in members:
@@ -187,10 +273,10 @@ class SubtitleGroup:
 
     def __find_reset_positions(self, members: list[DisplaySet]) -> list[int]:
         """
-        In PGS Files END segments are usually sized to 11 bytes, contain no objects
+        In PGS files END segments are usually sized to 11 bytes, contain no objects
         & are placed at the end of the group. However, if elements overlap an additional
         intermediate RESET segment is inserted which drops the number of objects and marks the
-        position a Palette update can happen & either new Elements can overlap or the overlap ends.
+        position a Palette update can happen & either new elements can overlap or the overlap ends.
 
         PGS subtitles can only show 2 objects on screen at once.
 
@@ -203,7 +289,7 @@ class SubtitleGroup:
         -------
 
         list
-            Contains the indices of the RESET segments
+            Contains the indices of the RESET segments.
         """
         reset_positions = []
         for index, ds in enumerate(members):
@@ -216,6 +302,21 @@ class SubtitleGroup:
         return reset_positions
 
     def __find_redefintion_positions(self, members: list[DisplaySet]) -> list[int]:
+        """
+        In PGS REDEF segments usually define a new set of Palettes, Windows and CompositionObjects.
+        They also define the number of Windows currently active. REDEF segments usually follow RESET
+        segments as they define new content and their positions about to come after.
+
+        This finds these positions.
+
+        A START segment is also a valid REDEF segment.
+
+        Returns
+        -------
+
+        list
+            Contains indices of REDEF segments.
+        """
         redef_positions = []
         for index, ds in enumerate(members):
             if (
@@ -233,6 +334,16 @@ class SubtitleGroup:
         redef_positions: list[int],
         members: list[DisplaySet],
     ) -> dict[int, list[DisplaySet]]:
+        """
+        Finds the actual DisplaySets which are overlapping starting from each REDEF segment position
+        until the immediately following RESET segment is reached.
+
+        Returns
+        -------
+
+        dict
+            Contains all DisplaySets that are overlapping grouped by the REDEF segments position.
+        """
         overlapping: dict[int, list[DisplaySet]] = {}
 
         for pos, reset in enumerate(reset_positions):
@@ -247,7 +358,24 @@ class SubtitleGroup:
         timelines: dict[str, list[TimelineItem]],
         ds: DisplaySet,
         global_palettes: dict[int, list[Palette]],
-    ):
+    ) -> dict[str, list[TimelineItem]]:
+        """
+        TimelineItems extracted from PGS subtitles have no correlation to their respective
+        counterparts coming before or after.
+
+        Process each item and extract the WindowID they are displayed in. If a prior item
+        already exists within the Timelines dict, check if they are the same item referenced
+        by their ID.
+
+        If its a new item, simply add it to the Timelines dict, else update prior items data
+        with current items data where required.
+
+        Returns
+        -------
+
+        dict
+            Timelines dict once a new item has been processed.
+        """
         if new_timeline.position in timelines:
             prev_timeline = timelines[new_timeline.position][-1]
             prev_timeline.end = new_timeline.start
@@ -270,6 +398,18 @@ class SubtitleGroup:
     def __gen_timelines(
         self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
     ) -> dict[str, list[TimelineItem]]:
+        """
+        Generate timelines. Timelines consist of TimelineItems and describe the changes
+        in either the Top or Bottom window of a PGS file. Items will be grouped as one
+        if they display the same image within the same position and will be treated as
+        new items if a new image is being defined.
+
+        Returns
+        -------
+
+        dict
+            Dictionary containing TimelineItems displayed in either Top or Bottom window.
+        """
         timelines: dict[str, list[TimelineItem]] = {}
 
         for ds in members:
@@ -293,6 +433,20 @@ class SubtitleGroup:
         reset_statements: DisplaySet,
         end: DisplaySet,
     ) -> dict[str, list[TimelineItem]]:
+        """
+        Reprocess dictionary containing TimelineItems displayed in either Top or Bottom window.
+        Since END & RESET segments do not define images within them, they will not be correlated
+        to a specific TimelineItem.
+
+        However they define the true end timestamp for the TimelineItem prior, so the items end
+        needs to be extended to match the END / RESET segments display timestamp.
+
+        Returns
+        -------
+
+        dict
+            Dictionary containing TimelineItems displayed in either Top or Bottom window.
+        """
         for _, items in fixables.items():
             fixable = items[-1]
 
@@ -310,6 +464,17 @@ class SubtitleGroup:
     def __gen_pgs_subtitle_items(
         self, timelines: list[dict[str, list[TimelineItem]]]
     ) -> list[PgsSubtitleItem]:
+        """
+        Generate PgsSubtitleItems which hold metadata on the image as a PgsImage converted from
+        raw bytes and the matching Palette defined.
+
+        Returns
+        -------
+
+        list
+            List containing PgsSubtitleItems which will eventual contain the text extracted from
+            the PGS image.
+        """
         items: list[PgsSubtitleItem] = []
 
         for timeline in timelines:
@@ -321,11 +486,23 @@ class SubtitleGroup:
 
 @dataclass
 class Pgs:
+    """
+    An instance of PGS represent a mapping of a PGS file to Python.
+    The PGS.items property contains all PgsSubtitleItem contained within
+    the specified PGS file.
+
+    Parameters
+    ----------
+    tmp_location: str
+        Location of a prior extract .sub PGS file.
+    temp_folder: str
+        Only necessary for debugging. Directory where to dump the metadata. Defaults to \"tmp\"
+    """
+
     __slots__ = (
         "tmp_location",
         "temp_folder",
         "_items",
-        "subtitle_groups",
     )
 
     def __init__(
@@ -336,16 +513,37 @@ class Pgs:
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
         self._items: typing.Optional[list[PgsSubtitleItem]] = None
-        self.subtitle_groups = None
 
     @property
     def items(self) -> list[PgsSubtitleItem]:
+        """
+        Return PgsSubtitleItems which hold metadata on the image as a PgsImage converted from
+        raw bytes.
+
+        Returns
+        -------
+
+        list
+            List containing PgsSubtitleItems which will eventual contain the text extracted from
+            the PGS image.
+        """
         if self._items is None:
             with open(self.tmp_location, "+rb") as data:
                 self._items = self.__decode(data.read())
         return self._items
 
     def __decode(self, data: bytes) -> list[PgsSubtitleItem]:
+        """
+        Decodes the PGS file provided as raw bytes and group the contained
+        DisplaySets into unique PgsSubtitleItems.
+
+        Returns
+        -------
+
+        list
+            List containing PgsSubtitleItems which will eventual contain the text extracted from
+            the PGS image.
+        """
         display_sets = list(PgsReader.decode(data))
         groups: list[list[DisplaySet]] = []
 
@@ -367,17 +565,18 @@ class Pgs:
 
         # test_groups = list(range(100, 112))
         # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        # subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
         return list(
-            chain.from_iterable(
-                [group.pgs_subtitle_items for group in self.subtitle_groups]
-            )
+            chain.from_iterable([group.pgs_subtitle_items for group in subtitle_groups])
         )
 
     def dump_display_sets(self, display_sets: list[DisplaySet], path=""):
+        """
+        Dumps DisplaySets contained in PGS file as .txt and .json
+        """
         new_line = "\n"
 
         actual_path = self.temp_folder if not path else path
