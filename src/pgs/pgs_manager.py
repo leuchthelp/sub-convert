@@ -127,8 +127,8 @@ class PgsManager:
                     formating = "%H:%M:%S,%f"
                     tmp = pd.DataFrame(
                         data={
-                            "start": [datetime.strptime(str(item.start), formating)],
-                            "end": [datetime.strptime(str(item.end), formating)],
+                            "start": [str(datetime.strptime(str(item.start), formating))],
+                            "end": [str(datetime.strptime(str(item.end), formating))],
                             "placement": [item.position],
                             "text": [item.text],
                         },
