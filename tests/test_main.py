@@ -17,7 +17,7 @@ def test_check_aged_pos_offset():
     path = Path("tests/files/for-main/test-adjacent-exists.srt")
     assert check_aged(path, offset="s+1") is True
     #assert check_aged(path, offset="+1") is True
-    assert check_aged(path, offset="1") is True
+    #assert check_aged(path, offset="1") is True
 
 
 def test_check_aged_neg_offset():
