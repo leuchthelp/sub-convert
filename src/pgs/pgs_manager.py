@@ -163,6 +163,7 @@ class PgsManager:
                 "Top": "#AB029E",
                 "Bottom": "#FF4430",
             },
+            category_orders={"placement": ["Top", "Bottom"]},
         )
 
         debug_path = Path("debug")
