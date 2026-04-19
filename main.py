@@ -47,7 +47,7 @@ def check_if_adjacent_exists(path: Path) -> bool:
 def check_aged(path: Path, offset: str) -> bool:
     tmp = re.split("(\\W)", offset)
 
-    delta = "h"
+    delta = "d"
     try:
         if len(tmp) < 2:
             int_offset = int(tmp[0])
@@ -250,7 +250,7 @@ def main():
         )
     )
 
-    #pgs_managers = [list(pgs_managers)[0]]
+    # pgs_managers = [list(pgs_managers)[0]]
 
     # Setup ocr prompt and message template
     ocr_task = "ocr"
