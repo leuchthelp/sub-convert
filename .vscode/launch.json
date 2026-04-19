@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args":  ["-d", "-o", "-p", "smb/jellyfin/shows/Terror in Resonance (2014)"]
+            "args":  ["-d", "-o", "-p", "smb/jellyfin/shows/Terror in Resonance (2014)", "-cw", "1", "-ow", "2", "-lw", "2" , "-om", "PaddleModelCore"]
         },
         {
             "name": "Python Debugger: Older/younger check",

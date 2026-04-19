@@ -358,7 +358,7 @@ class SubtitleGroup:
                 ds.pcs.size in [19, 27]
                 and ds.pcs.number_composition_objects in [1, 2]
                 and ds.ods_segments
-                and ds.pds_segments
+                # and ds.pds_segments
             ):
                 if (
                     index - 1 in reset_pos
@@ -511,7 +511,10 @@ class SubtitleGroup:
     ):
         prev = previous[pos][-1]
         curr = current[pos][0]
-        if prev.end == curr.start:
+        if (
+            prev.end == curr.start
+            and prev.comp_obj.object_id == curr.comp_obj.object_id
+        ):
             if not curr.display_obj:
                 curr.display_obj = prev.display_obj
 
@@ -526,6 +529,7 @@ class SubtitleGroup:
 
             self.__combine(previous=previous, current=timeline, pos="Bottom")
             self.__combine(previous=previous, current=timeline, pos="Top")
+            previous = timeline
 
         return timelines
 
@@ -631,10 +635,10 @@ class Pgs:
                 tmp = []
 
         # Debug helper code
-        #test_groups = list(range(100, 112))
-        #test_groups = list(range(47, 53))
-        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        # test_groups = list(range(100, 112))
+        # test_groups = list(range(277, 283))
+        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
         self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 

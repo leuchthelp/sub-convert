@@ -92,12 +92,18 @@ class PgsManager:
         pgs_items = self.pgs.items
 
         final: list[tuple[Image.Image, PgsSubtitleItem]] = []
-        for item in pgs_items:
+        for index, item in enumerate(pgs_items):
             # Expand border to ensure proper recognition if text is very close to image borders.
             # Also invert as black-outline texts is saved inverted (as white-outline).
             # This could help detection.
             image = Image.fromarray(item.image.data).convert("RGB")
-            rgb = image.getpixel((0, 0))
+
+            try:
+                rgb = image.getpixel((0, 0))
+            except:
+                print(
+                    f"index: {index}, track: {self.mkv_track.file_path}-{self.mkv_track.track_id}"
+                )
 
             color = "Black" if rgb == (0, 0, 0) else "White"
             image = ImageOps.expand(image=image, border=10, fill=color)
@@ -124,13 +130,19 @@ class PgsManager:
         for group in subtitle_groups:
             for timeline in group.timelines:
                 for item in list(chain.from_iterable(timeline.values())):
-                    formating = "%H:%M:%S,%f"
+                    formatting = "%H:%M:%S,%f"
                     tmp = pd.DataFrame(
                         data={
                             "start": [
-                                str(datetime.strptime(str(item.start), formating))
+                                datetime.strptime(
+                                    str(item.start), formatting
+                                ).isoformat(timespec="microseconds")
                             ],
-                            "end": [str(datetime.strptime(str(item.end), formating))],
+                            "end": [
+                                datetime.strptime(str(item.end), formatting).isoformat(
+                                    timespec="microseconds"
+                                )
+                            ],
                             "placement": [item.position],
                             "text": [item.text],
                         },
