@@ -70,7 +70,7 @@ class TimelineItem:
             )
 
         self.pgs_subtitle_item: PgsSubtitleItem | None
-        self.overlapping_with: list[TimelineItem] = []
+        self.overlapping_with: list[SubRipTime] = []
         self.__placeholder: str
 
     def gen_pgs_subtitle_item(self) -> PgsSubtitleItem:
@@ -196,8 +196,28 @@ class SubtitleGroup:
 
         if self.overlap:
             global_palettes = self.__find_global_palettes(members=members)
-            redef_positions = self.__find_redefintion_positions(members=members)
             reset_positions = self.__find_reset_positions(members=members)
+            redef_positions = self.__find_redefintion_positions(
+                members=members, reset_pos=reset_positions
+            )
+
+            acquisition_point_present = self.__acquisition_point_present(
+                members=members
+            )
+            if acquisition_point_present != -1:
+                new_reset: list[int] = []
+                new_redef: list[int] = []
+
+                if members[acquisition_point_present - 1].pcs.is_start():
+                    new_reset.append(acquisition_point_present)
+                    new_redef.append(acquisition_point_present - 1)
+
+                new_reset.append(reset_positions[-1])
+                new_redef.append(acquisition_point_present)
+
+                reset_positions = new_reset
+                redef_positions = new_redef
+
             overlapping = self.__find_overlapping(
                 reset_positions=reset_positions,
                 redef_positions=redef_positions,
@@ -222,6 +242,8 @@ class SubtitleGroup:
                         end=actual_end,
                     )
                 )
+
+            timelines = self.__look_to_combine(timelines=timelines)
         else:
             tmp = self.__gen_timelines(members=members, global_palettes=global_palettes)
             timelines.append(
@@ -235,7 +257,7 @@ class SubtitleGroup:
 
     def __find_overlap(self, members: list[DisplaySet]) -> bool:
         """
-        Check if the current set of DisplaySets between a POCH_START, ACQUISITION_POINT &
+        Check if the current set of DisplaySets between a EPOCH_START, ACQUISITION_POINT &
         EndSegment have overlapping Windows. In PGS there can be at most two overlapping
         Windows at a time.
 
@@ -249,6 +271,13 @@ class SubtitleGroup:
             if ds.pcs.number_composition_objects > 1:
                 return True
         return False
+
+    def __acquisition_point_present(self, members: list[DisplaySet]) -> int:
+        for index, ds in enumerate(members):
+            if ds.pcs.is_aquisition_point():
+                return index
+
+        return -1
 
     def __find_global_palettes(
         self, members: list[DisplaySet]
@@ -299,9 +328,15 @@ class SubtitleGroup:
                 and not ds.ods_segments
             ):
                 reset_positions.append(index)
+
+            if ds.pcs.is_aquisition_point():
+                reset_positions.append(index)
+
         return reset_positions
 
-    def __find_redefintion_positions(self, members: list[DisplaySet]) -> list[int]:
+    def __find_redefintion_positions(
+        self, members: list[DisplaySet], reset_pos: list[int]
+    ) -> list[int]:
         """
         In PGS REDEF segments usually define a new set of Palettes, Windows and CompositionObjects.
         They also define the number of Windows currently active. REDEF segments usually follow RESET
@@ -320,12 +355,18 @@ class SubtitleGroup:
         redef_positions = []
         for index, ds in enumerate(members):
             if (
-                ds.pcs.size == 19
-                and ds.pcs.number_composition_objects == 1
+                ds.pcs.size in [19, 27]
+                and ds.pcs.number_composition_objects in [1, 2]
                 and ds.ods_segments
                 and ds.pds_segments
             ):
-                redef_positions.append(index)
+                if (
+                    index - 1 in reset_pos
+                    or ds.pcs.is_start()
+                    or ds.pcs.is_aquisition_point()
+                ):
+                    redef_positions.append(index)
+
         return redef_positions
 
     def __find_overlapping(
@@ -350,6 +391,7 @@ class SubtitleGroup:
             start = redef_positions[pos]
             stop = reset
             overlapping[start] = members[start : stop + 1]
+
         return overlapping
 
     def __process_timeline_item(
@@ -461,6 +503,32 @@ class SubtitleGroup:
 
         return fixables
 
+    def __combine(
+        self,
+        previous: dict[str, list[TimelineItem]],
+        current: dict[str, list[TimelineItem]],
+        pos: str,
+    ):
+        prev = previous[pos][-1]
+        curr = current[pos][0]
+        if prev.end == curr.start:
+            if not curr.display_obj:
+                curr.display_obj = prev.display_obj
+
+    def __look_to_combine(
+        self, timelines: list[dict[str, list[TimelineItem]]]
+    ) -> list[dict[str, list[TimelineItem]]]:
+        previous: dict[str, list[TimelineItem]] | None = None
+        for timeline in timelines:
+            if previous is None:
+                previous = timeline
+                continue
+
+            self.__combine(previous=previous, current=timeline, pos="Bottom")
+            self.__combine(previous=previous, current=timeline, pos="Top")
+
+        return timelines
+
     def __gen_pgs_subtitle_items(
         self, timelines: list[dict[str, list[TimelineItem]]]
     ) -> list[PgsSubtitleItem]:
@@ -499,11 +567,7 @@ class Pgs:
         Only necessary for debugging. Directory where to dump the metadata. Defaults to \"tmp\"
     """
 
-    __slots__ = (
-        "tmp_location",
-        "temp_folder",
-        "_items",
-    )
+    __slots__ = ("tmp_location", "temp_folder", "_items", "subtitle_groups")
 
     def __init__(
         self,
@@ -545,8 +609,11 @@ class Pgs:
             the PGS image.
         """
         display_sets = list(PgsReader.decode(data))
-        groups: list[list[DisplaySet]] = []
 
+        if self.temp_folder != "tmp":
+            self.dump_display_sets(display_sets=display_sets)
+
+        groups: list[list[DisplaySet]] = []
         tmp = []
         for ds in display_sets:
             if ds.is_start() or (
@@ -563,14 +630,18 @@ class Pgs:
                 groups.append(tmp)
                 tmp = []
 
-        # test_groups = list(range(100, 112))
-        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        # subtitle_groups = [SubtitleGroup(members=sliced)]
+        # Debug helper code
+        #test_groups = list(range(100, 112))
+        #test_groups = list(range(47, 53))
+        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
         return list(
-            chain.from_iterable([group.pgs_subtitle_items for group in subtitle_groups])
+            chain.from_iterable([
+                group.pgs_subtitle_items for group in self.subtitle_groups
+            ])
         )
 
     def dump_display_sets(self, display_sets: list[DisplaySet], path=""):

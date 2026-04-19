@@ -31,7 +31,7 @@ image-test
 !tests/files/for-main/test-adjacent-exists.mkv
 !tests/files/for-main/test-adjacent-exists.srt
 !tests/files/for-main/test-no-adjacent.mkv
-!tests/files/for-pgs/test.sup
+!tests/files/for-pgs/test.7z
 .cache
 site
 .pytest_cache
