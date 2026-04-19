@@ -22,5 +22,8 @@ jobs:
         pip install -r tests/requirements.txt
     - name: Analyzing the code with ruff
       run: |
-        ruff check --fix
+        ruff check --fix src/
+        ruff check --fix main.py
+    - name: Run pytest
+      run: |
         pytest tests/
