@@ -127,7 +127,9 @@ class PgsManager:
                     formating = "%H:%M:%S,%f"
                     tmp = pd.DataFrame(
                         data={
-                            "start": [str(datetime.strptime(str(item.start), formating))],
+                            "start": [
+                                str(datetime.strptime(str(item.start), formating))
+                            ],
                             "end": [str(datetime.strptime(str(item.end), formating))],
                             "placement": [item.position],
                             "text": [item.text],
@@ -167,12 +169,10 @@ class PgsManager:
 
     def __timeline_events(self, timeline: dict[str, list[TimelineItem]]):
         tmp = list(
-            chain.from_iterable(
-                [
-                    (item.start, item.end)
-                    for item in chain.from_iterable(timeline.values())
-                ]
-            )
+            chain.from_iterable([
+                (item.start, item.end)
+                for item in chain.from_iterable(timeline.values())
+            ])
         )
 
         timeline_events: list[SubRipTime] = []
