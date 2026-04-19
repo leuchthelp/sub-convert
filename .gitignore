@@ -28,10 +28,13 @@ results
 smb
 cached_models
 image-test
+.cache
+site
+.pytest_cache
+
+# Allowed files for tests
+!tests/requirements.txt
 !tests/files/for-main/test-adjacent-exists.mkv
 !tests/files/for-main/test-adjacent-exists.srt
 !tests/files/for-main/test-no-adjacent.mkv
 !tests/files/for-pgs/test.7z
-.cache
-site
-.pytest_cache

@@ -1,0 +1,11 @@
+pytest 
+torch 
+pysrt 
+setuptools 
+rich 
+numpy 
+colorama 
+pillow 
+langcodes 
+pymkv2
+py7zr
