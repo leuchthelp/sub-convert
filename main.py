@@ -250,8 +250,6 @@ def main():
         )
     )
 
-    pgs_managers = [list(pgs_managers)[0]]
-
     # Setup ocr prompt and message template
     ocr_task = "ocr"
     prompts = {
