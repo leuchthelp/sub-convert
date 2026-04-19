@@ -97,13 +97,7 @@ class PgsManager:
             # Also invert as black-outline texts is saved inverted (as white-outline).
             # This could help detection.
             image = Image.fromarray(item.image.data).convert("RGB")
-
-            try:
-                rgb = image.getpixel((0, 0))
-            except:
-                print(
-                    f"index: {index}, track: {self.mkv_track.file_path}-{self.mkv_track.track_id}"
-                )
+            rgb = image.getpixel((0, 0))
 
             color = "Black" if rgb == (0, 0, 0) else "White"
             image = ImageOps.expand(image=image, border=10, fill=color)
