@@ -337,7 +337,7 @@ class PgsManager:
             if track.language is not None:
                 path = path + "." + track.language
         else:
-            path = path + "." + Language.get(final_lang).to_alpha3()
+            path = path + "." + Language.get(final_lang).to_alpha3(variant="B")
 
         potential_path = f"{str(Path(track.file_path)).replace('.mkv', '')}{path}.srt"
         if self.overwrite_if_exists and Path(potential_path).exists():
