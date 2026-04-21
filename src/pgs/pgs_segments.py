@@ -3,6 +3,7 @@ import logging
 import typing
 import enum
 
+from PIL import Image, ImageOps
 from numpy import ndarray
 import numpy as np
 
@@ -95,12 +96,9 @@ class PgsImage:
         return self._data
 
     @classmethod
-    def decode_rle_image(
-        cls, data: bytes, palettes: list[Palette], binary=True
-    ) -> ndarray:
+    def decode_rle_image(cls, data: bytes, palettes: list[Palette]) -> ndarray:
         image_array: list[int] = []
-        alpha_array: list[int] = []
-        dimension = 1 if binary else 3
+        dimension = 4
         cols = 1
         i = 0
         while i < len(data):
@@ -108,30 +106,32 @@ class PgsImage:
             if not length and cols < 2:
                 cols = len(image_array) // dimension
             palette = palettes[color]
-            image_color = cls.get_color(palette, binary)
-            image_array.extend(image_color * length)
-            if not binary:
-                alpha_array.extend([palette[3]] * length)
+            image_color = cls.get_color(palette)
+            image_array.extend((*image_color, palette.alpha) * length)
             i += count
 
         rows = (len(image_array) // dimension + cols - 1) // cols
         if cols * rows * dimension != len(image_array):
             # corrupted image
-            delta = cols * rows * dimension - len(image_array)
-            image_array.extend((cls.get_color(palettes[0], binary) * dimension) * delta)
+            delta = (cols * rows * dimension - len(image_array)) // dimension
+            image_array.extend((*cls.get_color(palettes[0]), palettes[0].alpha) * delta)
 
-        img = np.array(image_array, dtype=np.uint8).reshape(
-            (rows, cols) if binary else (rows, cols, dimension)
-        )
-        if binary:
-            return img
-
-        # Placeholder for colored images
-        return np.zeros(5)
+        img = np.array(image_array, dtype=np.uint8).reshape((rows, cols, dimension))
+        return img
 
     @classmethod
-    def get_color(cls, palette: Palette, binary: bool):
-        return ([0] if palette[0] > 127 else [255]) if binary else palette[:3]
+    def ycbcr_to_rgb(cls, y, cb, cr):
+        r = y + 1.402 * (cr - 128)
+        g = y - 0.344136 * (cb - 128) - 0.714136 * (cr - 128)
+        b = y + 1.772 * (cb - 128)
+        r = int(max(0, min(0xFF, r)))
+        g = int(max(0, min(0xFF, g)))
+        b = int(max(0, min(0xFF, b)))
+        return (r, g, b)
+
+    @classmethod
+    def get_color(cls, palette: Palette):
+        return cls.ycbcr_to_rgb(*palette[:3])
 
     @classmethod
     def decode_rle_position(cls, data: bytes, i: int):
@@ -313,14 +313,10 @@ class PresentationCompositionSegment(BaseSegment):
         }
 
     def is_start(self):
-        return self.composition_state in (
-            CompositionState.EPOCH_START,
-        )
-    
+        return self.composition_state in (CompositionState.EPOCH_START,)
+
     def is_acquisition_point(self):
-        return self.composition_state in (
-            CompositionState.ACQUISITION_POINT,
-        )
+        return self.composition_state in (CompositionState.ACQUISITION_POINT,)
 
     def is_normal(self):
         return self.composition_state in (CompositionState.NORMAL_CASE,)
@@ -490,7 +486,7 @@ class DisplaySet:
 
     def is_start(self):
         return self.pcs.is_start()
-    
+
     def is_acquisition_point(self):
         return self.pcs.is_acquisition_point()
 

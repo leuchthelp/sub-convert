@@ -97,11 +97,10 @@ class PgsManager:
                 # Expand border to ensure proper recognition if text is very close to image borders.
                 # Also invert as black-outline texts is saved inverted (as white-outline).
                 # This could help detection.
-                image = Image.fromarray(item.image.data).convert("RGB")
-                rgb = image.getpixel((0, 0))
-
-                color = "Black" if rgb == (0, 0, 0) else "White"
-                image = ImageOps.expand(image=image, border=10, fill=color)
+                image = Image.fromarray(item.image.data)
+                rgb = image.im.getpixel((0, 0))
+                
+                image = ImageOps.expand(image=image, border=10, fill=rgb)
                 #image = ImageOps.invert(image)
                 final.append((image, item))
 
