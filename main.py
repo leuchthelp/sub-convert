@@ -384,7 +384,7 @@ def main():
 
                         # There should at least be a couple of tasks present, before we
                         # consider our progress finished. Otherwise if the tool is tool
-                        # slow, it will immidiately end the update loop
+                        # slow, it will immediately end the update loop
                         if progress.finished and tasks:
                             end = True
 

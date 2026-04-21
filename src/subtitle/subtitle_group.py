@@ -192,10 +192,11 @@ class SubtitleGroup:
 
         end = members[-1]
         global_palettes: dict[int, list[Palette]] = {}
+        global_palettes = self.__find_global_palettes(members=members)
+
         timelines: list[dict[str, list[TimelineItem]]] = []
 
         if self.overlap:
-            global_palettes = self.__find_global_palettes(members=members)
             reset_positions = self.__find_reset_positions(members=members)
             redef_positions = self.__find_redefintion_positions(
                 members=members, reset_pos=reset_positions
@@ -636,7 +637,7 @@ class Pgs:
 
         # Debug helper code
         # test_groups = list(range(100, 112))
-        # test_groups = list(range(277, 283))
+        # test_groups = list(range(146, 149))
         # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
         # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
