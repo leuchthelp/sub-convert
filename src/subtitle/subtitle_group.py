@@ -44,7 +44,7 @@ class TimelineItem:
         window_id: int = -1,
     ):
         self.start = start
-        self.end = end  # will be overwridden by the following TimelineItem item
+        self.end = end  # will be overwritten by the following TimelineItem item
 
         if ds is not None:
             self.comp_obj = [
@@ -53,7 +53,7 @@ class TimelineItem:
                 if comp_obj.window_id == window_id
             ].pop()
 
-            # Full screen coordiantes for PGS start in the top left;
+            # Full screen coordinates for PGS start in the top left;
             # smaller offset = higher up | larger offset = lower down
             self.position = (
                 "Top" if self.comp_obj.y_offset < ds.pcs.height / 2 else "Bottom"
@@ -198,7 +198,7 @@ class SubtitleGroup:
 
         if self.overlap:
             reset_positions = self.__find_reset_positions(members=members)
-            redef_positions = self.__find_redefintion_positions(
+            redef_positions = self.__find_redefinition_positions(
                 members=members, reset_pos=reset_positions
             )
 
@@ -275,7 +275,7 @@ class SubtitleGroup:
 
     def __acquisition_point_present(self, members: list[DisplaySet]) -> int:
         for index, ds in enumerate(members):
-            if ds.pcs.is_aquisition_point():
+            if ds.pcs.is_acquisition_point():
                 return index
 
         return -1
@@ -330,12 +330,12 @@ class SubtitleGroup:
             ):
                 reset_positions.append(index)
 
-            if ds.pcs.is_aquisition_point():
+            if ds.pcs.is_acquisition_point():
                 reset_positions.append(index)
 
         return reset_positions
 
-    def __find_redefintion_positions(
+    def __find_redefinition_positions(
         self, members: list[DisplaySet], reset_pos: list[int]
     ) -> list[int]:
         """
@@ -364,7 +364,7 @@ class SubtitleGroup:
                 if (
                     index - 1 in reset_pos
                     or ds.pcs.is_start()
-                    or ds.pcs.is_aquisition_point()
+                    or ds.pcs.is_acquisition_point()
                 ):
                     redef_positions.append(index)
 

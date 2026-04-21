@@ -316,7 +316,7 @@ class PresentationCompositionSegment(BaseSegment):
             CompositionState.EPOCH_START,
         )
     
-    def is_aquisition_point(self):
+    def is_acquisition_point(self):
         return self.composition_state in (
             CompositionState.ACQUISITION_POINT,
         )
