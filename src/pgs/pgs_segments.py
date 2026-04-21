@@ -489,6 +489,9 @@ class DisplaySet:
 
     def is_start(self):
         return self.pcs.is_start()
+    
+    def is_acquisition_point(self):
+        return self.pcs.is_acquisition_point()
 
     def is_normal(self):
         return self.pcs.is_normal()

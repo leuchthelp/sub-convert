@@ -213,6 +213,10 @@ class SubtitleGroup:
                     new_reset.append(acquisition_point_present)
                     new_redef.append(acquisition_point_present - 1)
 
+                if acquisition_point_present - 1 in reset_positions:
+                    new_reset.append(acquisition_point_present - 1)
+                    new_redef.append(0)
+
                 new_reset.append(reset_positions[-1])
                 new_redef.append(acquisition_point_present)
 
@@ -621,8 +625,10 @@ class Pgs:
         groups: list[list[DisplaySet]] = []
         tmp = []
         for ds in display_sets:
-            if ds.is_start() or (
-                ds.is_normal() and len(ds.ods_segments) != 0 or ds.pcs.size == 19
+            if (
+                ds.is_start()
+                or ds.is_acquisition_point()
+                or (ds.is_normal() and len(ds.ods_segments) != 0 or ds.pcs.size == 19)
             ):
                 tmp.append(ds)
             elif (
@@ -637,7 +643,7 @@ class Pgs:
 
         # Debug helper code
         # test_groups = list(range(100, 112))
-        # test_groups = list(range(146, 149))
+        # test_groups = list(range(748, 754))
         # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
         # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 

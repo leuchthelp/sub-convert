@@ -66,51 +66,53 @@ class PgsManager:
             f"{self.tmp_path}/{self.mkv_track.file_path}"
             + f"-{self.mkv_track.track_id}-{self.mkv_track.track_codec}.sup"
         )
-        cmd = [
-            "mkvextract",
-            self.mkv_track.file_path,
-            "tracks",
-            f"{self.mkv_track.track_id}:{tmp_file}",
-        ]
+        try:
+            cmd = [
+                "mkvextract",
+                self.mkv_track.file_path,
+                "tracks",
+                f"{self.mkv_track.track_id}:{tmp_file}",
+            ]
 
-        path = Path("tmp")
-        if self.dump_debug:
-            debug_path = Path("debug")
-            debug_path.mkdir(parents=True, exist_ok=True)
-            path = Path(
-                (
-                    f"{debug_path}/{self.hash[0:6]}"
-                    + f"-{Path(self.mkv_track.file_path).name}"
-                    + f"-{self.mkv_track.track_id}"
-                )
-            ).absolute()
-            path.mkdir(parents=True, exist_ok=True)
+            path = Path("tmp")
+            if self.dump_debug:
+                debug_path = Path("debug")
+                debug_path.mkdir(parents=True, exist_ok=True)
+                path = Path(
+                    (
+                        f"{debug_path}/{self.hash[0:6]}"
+                        + f"-{Path(self.mkv_track.file_path).name}"
+                        + f"-{self.mkv_track.track_id}"
+                    )
+                ).absolute()
+                path.mkdir(parents=True, exist_ok=True)
 
-        subprocess.check_output(cmd)
-        self.pgs = Pgs(tmp_location=tmp_file, temp_folder=str(path))
+            subprocess.check_output(cmd)
+            self.pgs = Pgs(tmp_location=tmp_file, temp_folder=str(path))
 
-        pgs_items = self.pgs.items
+            pgs_items = self.pgs.items
 
-        final: list[tuple[Image.Image, PgsSubtitleItem]] = []
-        for index, item in enumerate(pgs_items):
-            # Expand border to ensure proper recognition if text is very close to image borders.
-            # Also invert as black-outline texts is saved inverted (as white-outline).
-            # This could help detection.
-            image = Image.fromarray(item.image.data).convert("RGB")
-            rgb = image.getpixel((0, 0))
+            final: list[tuple[Image.Image, PgsSubtitleItem]] = []
+            for index, item in enumerate(pgs_items):
+                # Expand border to ensure proper recognition if text is very close to image borders.
+                # Also invert as black-outline texts is saved inverted (as white-outline).
+                # This could help detection.
+                image = Image.fromarray(item.image.data).convert("RGB")
+                rgb = image.getpixel((0, 0))
 
-            color = "Black" if rgb == (0, 0, 0) else "White"
-            image = ImageOps.expand(image=image, border=10, fill=color)
-            image = ImageOps.invert(image)
-            final.append((image, item))
+                color = "Black" if rgb == (0, 0, 0) else "White"
+                image = ImageOps.expand(image=image, border=10, fill=color)
+                image = ImageOps.invert(image)
+                final.append((image, item))
 
-        if self.dump_debug:
-            image_path = Path(f"{path}/images")
-            image_path.mkdir(parents=True, exist_ok=True)
-            for index, (image, item) in enumerate(final):
-                image.save(f"{image_path}/{index}.png")
+            if self.dump_debug:
+                image_path = Path(f"{path}/images")
+                image_path.mkdir(parents=True, exist_ok=True)
+                for index, (image, item) in enumerate(final):
+                    image.save(f"{image_path}/{index}.png")
 
-        shutil.rmtree(path=self.tmp_path)
+        finally:
+            shutil.rmtree(path=self.tmp_path)
         return final
 
     def __debug_vis_timelines(self, subtitle_groups: list[SubtitleGroup]):
