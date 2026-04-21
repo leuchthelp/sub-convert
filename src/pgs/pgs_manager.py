@@ -102,7 +102,7 @@ class PgsManager:
 
                 color = "Black" if rgb == (0, 0, 0) else "White"
                 image = ImageOps.expand(image=image, border=10, fill=color)
-                image = ImageOps.invert(image)
+                #image = ImageOps.invert(image)
                 final.append((image, item))
 
             if self.dump_debug:

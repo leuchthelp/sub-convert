@@ -34,6 +34,7 @@ class ObjectSequenceType(enum.Enum):
     LAST = from_hex(b"\x40")
     FIRST = from_hex(b"\x80")
     FIRST_AND_LAST = from_hex(b"\xc0")
+    UNDEF = from_hex(b"\x00")
 
 
 class Palette(typing.NamedTuple):
