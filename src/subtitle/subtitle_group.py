@@ -7,8 +7,8 @@ import os
 
 from pysrt import SubRipTime
 
+from pgs.pgs_segments import PgsReader, DisplaySet, ObjectSequenceType
 from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
-from pgs.pgs_segments import PgsReader, DisplaySet
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,6 @@ class TimelineItem:
             )
 
         self.pgs_subtitle_item: PgsSubtitleItem | None
-        self.overlapping_with: list[SubRipTime] = []
         self.__placeholder: str
 
     def gen_pgs_subtitle_item(self) -> PgsSubtitleItem:
@@ -202,31 +201,8 @@ class SubtitleGroup:
                 members=members, reset_pos=reset_positions
             )
 
-            acquisition_point_present = self.__acquisition_point_present(
-                members=members
-            )
-            if acquisition_point_present != -1:
-                new_reset: list[int] = []
-                new_redef: list[int] = []
-
-                if members[acquisition_point_present - 1].pcs.is_start():
-                    new_reset.append(acquisition_point_present)
-                    new_redef.append(acquisition_point_present - 1)
-
-                if acquisition_point_present - 1 in reset_positions:
-                    new_reset.append(acquisition_point_present - 1)
-                    new_redef.append(0)
-
-                new_reset.append(reset_positions[-1])
-                new_redef.append(acquisition_point_present)
-
-                reset_positions = new_reset
-                redef_positions = new_redef
-
-            overlapping = self.__find_overlapping(
-                reset_positions=reset_positions,
-                redef_positions=redef_positions,
-                members=members,
+            overlapping, reset_positions, redef_positions = self.__define_overlapping(
+                members, reset_positions, redef_positions
             )
 
             tmp = [
@@ -250,15 +226,113 @@ class SubtitleGroup:
 
             timelines = self.__look_to_combine(timelines=timelines)
         else:
-            tmp = self.__gen_timelines(members=members, global_palettes=global_palettes)
-            timelines.append(
-                self.__fix_endpoints(fixables=tmp, reset_statements=end, end=end)
-            )
+            temp: dict[str, list[TimelineItem]] = {}
+
+            fade_in_groups, leftover = self.__find_fade_in(members=members)
+            if fade_in_groups:
+                for group in fade_in_groups:
+                    fade_range = [group[0], group[-1]]
+
+                    temp = self.__gen_timelines(fade_range, global_palettes)
+
+                    selected = group[int(len(group) // 1.3)]
+                    changeable = next(iter(temp.values()))[0]
+                    changeable.display_obj = selected.ods_segments
+                    if selected.pds_segments:
+                        changeable.palette = selected.pds_segments[0].palettes
+                    else:
+                        changeable.palette = global_palettes[0]
+
+                    timelines.append(
+                        self.__fix_endpoints(
+                            fixables=temp, reset_statements=group[-1], end=group[-1]
+                        )
+                    )
+
+                temp = self.__gen_timelines(leftover, global_palettes)
+                timelines.append(
+                    self.__fix_endpoints(
+                        fixables=temp, reset_statements=leftover[-1], end=leftover[-1]
+                    )
+                )
+
+            else:
+                temp = self.__gen_timelines(members, global_palettes)
+                timelines.append(
+                    self.__fix_endpoints(fixables=temp, reset_statements=end, end=end)
+                )
 
         self.timelines = timelines
         self.pgs_subtitle_items = self.__gen_pgs_subtitle_items(
             timelines=self.timelines
         )
+
+    def __find_fade_in(self, members: list[DisplaySet]):
+        fade_in_groups: list[list[DisplaySet]] = []
+
+        tmp = []
+        leftover = []
+        prev: DisplaySet | None = None
+        for ds in members:
+            end = ds.is_normal() and not ds.pcs.composition_objects
+            fade_in_type = (
+                ds.is_acquisition_point()
+                and ds.ods_segments[-1].sequence_type
+                == ObjectSequenceType.FIRST_AND_LAST
+            )
+
+            image_matches = True
+            height_delta = -1
+            width_delta = -1
+            if prev is not None and (not ds.is_start() or not end):
+                try:
+                    height_delta = abs(
+                        prev.ods_segments[-1].height - ds.ods_segments[-1].height
+                    )
+                    width_delta = abs(
+                        prev.ods_segments[-1].width - ds.ods_segments[-1].width
+                    )
+
+                    image_matches = False
+                    if height_delta <= 2 and width_delta <= 2:
+                        image_matches = True
+                except IndexError:
+                    image_matches = False
+
+            if fade_in_type or ds.is_start() or end:
+                if image_matches:
+                    tmp.append(ds)
+                    prev = ds
+                elif height_delta == 0 or width_delta == 0:
+                    fade_in_groups.append(tmp)
+                    tmp = []
+                    tmp.append(ds)
+                    prev = ds
+                else:
+                    leftover.append(ds)
+            else:
+                leftover.append(ds)
+                if len(tmp) > 7:
+                    fade_in_groups.append(tmp)
+                    tmp = []
+
+        if len(tmp) > 7:
+            fade_in_groups.append(tmp)
+
+        for idx, group in enumerate(fade_in_groups):
+            start, end = (
+                group[0].pcs.presentation_timestamp,
+                group[-1].pcs.presentation_timestamp,
+            )
+            duration = end - start
+            delta = float(f"{duration.seconds}.{duration.milliseconds}") / len(
+                group[1:-1]
+            )
+
+            if delta > 1.0:
+                fade_in_groups.pop(idx)
+
+        return fade_in_groups, leftover
 
     def __find_overlap(self, members: list[DisplaySet]) -> bool:
         """
@@ -398,6 +472,36 @@ class SubtitleGroup:
             overlapping[start] = members[start : stop + 1]
 
         return overlapping
+
+    def __define_overlapping(
+        self, members: list[DisplaySet], reset_pos: list[int], redef_pos: list[int]
+    ):
+        acquisition_point_present = self.__acquisition_point_present(members=members)
+        if acquisition_point_present != -1:
+            new_reset: list[int] = []
+            new_redef: list[int] = []
+
+            if members[acquisition_point_present - 1].pcs.is_start():
+                new_reset.append(acquisition_point_present)
+                new_redef.append(acquisition_point_present - 1)
+
+            if acquisition_point_present - 1 in reset_pos:
+                new_reset.append(acquisition_point_present - 1)
+                new_redef.append(0)
+
+            new_reset.append(reset_pos[-1])
+            new_redef.append(acquisition_point_present)
+
+            reset_pos = new_reset
+            redef_pos = new_redef
+
+        overlapping = self.__find_overlapping(
+            reset_positions=reset_pos,
+            redef_positions=redef_pos,
+            members=members,
+        )
+
+        return overlapping, reset_pos, redef_pos
 
     def __process_timeline_item(
         self,
@@ -643,9 +747,9 @@ class Pgs:
 
         # Debug helper code
         # test_groups = list(range(100, 112))
-        # test_groups = list(range(748, 754))
-        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        #test_groups = list(range(131, 159))
+        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
         self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
