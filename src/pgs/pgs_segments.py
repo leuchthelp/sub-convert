@@ -3,7 +3,6 @@ import logging
 import typing
 import enum
 
-from PIL import Image, ImageOps
 from numpy import ndarray
 import numpy as np
 

@@ -5,10 +5,14 @@ import typing
 import json
 import os
 
-from pysrt import SubRipTime
-
 from pgs.pgs_segments import PgsReader, DisplaySet, ObjectSequenceType
 from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
+from subtitle.timeline import (
+    TimelineItem,
+    look_to_combine,
+    gen_timelines,
+    fix_endpoints,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -16,256 +20,22 @@ logger.setLevel(logging.INFO)
 
 
 @dataclass
-class TimelineItem:
-    """
-    An instance of TimelineItem describes an objects being displayed either
-    a Top or Bottom timeline within a PGS file.
+class FadeManager:
+    def __init__(self, members: list[DisplaySet]):
+        temp: dict[str, list[TimelineItem]] = {}
 
-    A TimelineItem is effectively the text block being displayed on screen
-    for a set duration.
+        fade_in_groups, leftover = self.__find_fade_in(members=members)
+        if fade_in_groups:
+            for group in fade_in_groups:
+                fade_range = [group[0], group[-1]]
 
-    Parameters
-    ----------
-    start: SubRipTime
-        When the item starts being displayed.
-    ds: DisplaySet
-        DisplaySet associated with this item.
-    end: SubRipTime
-        When the item stops being displayed.
-    window_id: int
-        The Window the item is being displayed in within a PGS file.
-    """
-
-    def __init__(
-        self,
-        start: SubRipTime,
-        ds: DisplaySet | None = None,
-        end: SubRipTime = SubRipTime(),
-        window_id: int = -1,
-    ):
-        self.start = start
-        self.end = end  # will be overwritten by the following TimelineItem item
-
-        if ds is not None:
-            self.comp_obj = [
-                comp_obj
-                for comp_obj in ds.pcs.composition_objects
-                if comp_obj.window_id == window_id
-            ].pop()
-
-            # Full screen coordinates for PGS start in the top left;
-            # smaller offset = higher up | larger offset = lower down
-            self.position = (
-                "Top" if self.comp_obj.y_offset < ds.pcs.height / 2 else "Bottom"
-            )
-
-            display_obj_cand = [
-                display_obj
-                for display_obj in ds.ods_segments
-                if display_obj.id == self.comp_obj.object_id
-            ]
-            self.display_obj = display_obj_cand
-            self.palette = (
-                None if not ds.pds_segments else ds.pds_segments.pop().palettes
-            )
-
-        self.pgs_subtitle_item: PgsSubtitleItem | None
-        self.__placeholder: str
-
-    def gen_pgs_subtitle_item(self) -> PgsSubtitleItem:
-        """
-        Generates a PgsSubtitleItem described by the TimelineItems entry.
-        Contains the image and later text / language estimation of the text.
-
-        Returns
-        -------
-
-        PgsSubtitleItem
-            The PgsSubtitleItem which is displayed within this timeline slot.
-        """
-        if self.display_obj is None or self.palette is None:
-            raise ValueError
-
-        self.pgs_subtitle_item = PgsSubtitleItem(
-            ods=self.display_obj, comp_obj=self.comp_obj, palette=self.palette
-        )
-        return self.pgs_subtitle_item
-
-    @property
-    def text(self) -> str:
-        """
-        Returns text displayed within this timeline slot in a PGS file.
-
-        Returns
-        -------
-
-        str
-            Text displayed within this timeline slot in a PGS file.
-        """
-        text: str
-        try:
-            text = (
-                self.pgs_subtitle_item.text
-                if self.pgs_subtitle_item is not None
-                else self.__placeholder
-            )
-        except AttributeError:
-            text = self.__placeholder
-        return text
-
-    def set_text(self, text: str):
-        """
-        Sets the text displayed within this timeline slot in a PGS file.
-        """
-        self.__placeholder = text
-
-    @property
-    def lang_estimate(self) -> list[tuple[str, typing.Any]]:
-        """
-        Contains a list of languages and their probabilities matching
-        the text within a PgsSubtitleItem.
-
-        Returns
-        -------
-
-        list
-            Language estimation of the text.
-        """
-        tmp: list[tuple[str, typing.Any]] = []
-        try:
-            tmp = (
-                self.pgs_subtitle_item.lang_estimate
-                if self.pgs_subtitle_item is not None
-                else []
-            )
-        except AttributeError:
-            pass
-        return tmp
-
-    @property
-    def duration(self) -> SubRipTime:
-        """
-        Provides duration with which a given TimelineItem is being displayed.
-
-        Returns
-        -------
-
-        SubRipTime
-            Duration with which a given TimelineItem is being displayed.
-        """
-        if self.end is None:
-            raise ValueError("End has not been set yet.")
-        return self.end - self.start
-
-    def __repr__(self):
-        return f"<{self.__class__.__name__} [{self}]>"
-
-    def __str__(self):
-        return f"[{self.start} --> {self.end or ''}]"
-
-
-@dataclass
-class SubtitleGroup:
-    """
-    Defines an instance of a SubtitleGroup. A SubtitleGroup wraps around N DisplaySets
-    usually defining a START segment with the following segments defining more objects
-    to display until an END segment.
-
-    Within a group subtitles can overlap as PGS supports two windows displaying one image
-    each at a time. The current image is displayed until the window is updated with
-    another image.
-
-    Parameters
-    ----------
-    members: list
-        List of DisplaySets the SubtitleGroup wraps around.
-    """
-
-    __slots__ = ("pgs_subtitle_items", "timelines", "overlap")
-
-    def __init__(
-        self,
-        members: list[DisplaySet],
-    ):
-        self.overlap = self.__find_overlap(members=members)
-
-        end = members[-1]
-        global_palettes: dict[int, list[Palette]] = {}
-        global_palettes = self.__find_global_palettes(members=members)
-
-        timelines: list[dict[str, list[TimelineItem]]] = []
-
-        if self.overlap:
-            reset_positions = self.__find_reset_positions(members=members)
-            redef_positions = self.__find_redefinition_positions(
-                members=members, reset_pos=reset_positions
-            )
-
-            overlapping, reset_positions, redef_positions = self.__define_overlapping(
-                members, reset_positions, redef_positions
-            )
-
-            tmp = [
-                self.__gen_timelines(members=segment, global_palettes=global_palettes)
-                for _, segment in overlapping.items()
-            ]
-            reset_statements = [members[index] for index in reset_positions]
-            redef_statements = [members[index] for index in redef_positions]
-
-            for index, fixables in enumerate(tmp):
-                actual_end = (
-                    redef_statements[index + 1] if index + 1 < len(tmp) else end
-                )
-                timelines.append(
-                    self.__fix_endpoints(
-                        fixables=fixables,
-                        reset_statements=reset_statements[index],
-                        end=actual_end,
-                    )
-                )
-
-            timelines = self.__look_to_combine(timelines=timelines)
-        else:
-            temp: dict[str, list[TimelineItem]] = {}
-
-            fade_in_groups, leftover = self.__find_fade_in(members=members)
-            if fade_in_groups:
-                for group in fade_in_groups:
-                    fade_range = [group[0], group[-1]]
-
-                    temp = self.__gen_timelines(fade_range, global_palettes)
-
-                    selected = group[int(len(group) // 1.3)]
-                    changeable = next(iter(temp.values()))[0]
-                    changeable.display_obj = selected.ods_segments
-                    if selected.pds_segments:
-                        changeable.palette = selected.pds_segments[0].palettes
-                    else:
-                        changeable.palette = global_palettes[0]
-
-                    timelines.append(
-                        self.__fix_endpoints(
-                            fixables=temp, reset_statements=group[-1], end=group[-1]
-                        )
-                    )
-
-                temp = self.__gen_timelines(leftover, global_palettes)
-                timelines.append(
-                    self.__fix_endpoints(
-                        fixables=temp, reset_statements=leftover[-1], end=leftover[-1]
-                    )
-                )
-
-            else:
-                temp = self.__gen_timelines(members, global_palettes)
-                timelines.append(
-                    self.__fix_endpoints(fixables=temp, reset_statements=end, end=end)
-                )
-
-        self.timelines = timelines
-        self.pgs_subtitle_items = self.__gen_pgs_subtitle_items(
-            timelines=self.timelines
-        )
+                selected = group[int(len(group) // 1.3)]
+                changeable = next(iter(temp.values()))[0]
+                changeable.display_obj = selected.ods_segments
+                if selected.pds_segments:
+                    changeable.palette = selected.pds_segments[0].palettes
+                else:
+                    changeable.palette
 
     def __find_fade_in(self, members: list[DisplaySet]):
         fade_in_groups: list[list[DisplaySet]] = []
@@ -333,6 +103,76 @@ class SubtitleGroup:
                 fade_in_groups.pop(idx)
 
         return fade_in_groups, leftover
+
+
+@dataclass
+class SubtitleGroup:
+    """
+    Defines an instance of a SubtitleGroup. A SubtitleGroup wraps around N DisplaySets
+    usually defining a START segment with the following segments defining more objects
+    to display until an END segment.
+
+    Within a group subtitles can overlap as PGS supports two windows displaying one image
+    each at a time. The current image is displayed until the window is updated with
+    another image.
+
+    Parameters
+    ----------
+    members: list
+        List of DisplaySets the SubtitleGroup wraps around.
+    """
+
+    __slots__ = ("pgs_subtitle_items", "timelines", "overlap")
+
+    def __init__(
+        self,
+        members: list[DisplaySet],
+    ):
+        self.overlap = self.__find_overlap(members=members)
+
+        end = members[-1]
+        global_palettes: dict[int, list[Palette]] = {}
+        global_palettes = self.__find_global_palettes(members=members)
+
+        timelines: list[dict[str, list[TimelineItem]]] = []
+
+        if self.overlap:
+            reset_positions = self.__find_reset_positions(members=members)
+            redef_positions = self.__find_redefinition_positions(
+                members=members, reset_pos=reset_positions
+            )
+
+            overlapping, reset_positions, redef_positions = self.__define_overlapping(
+                members, reset_positions, redef_positions
+            )
+
+            tmp = [
+                gen_timelines(members=segment, global_palettes=global_palettes)
+                for _, segment in overlapping.items()
+            ]
+            reset_statements = [members[index] for index in reset_positions]
+            redef_statements = [members[index] for index in redef_positions]
+
+            for index, fixables in enumerate(tmp):
+                actual_end = (
+                    redef_statements[index + 1] if index + 1 < len(tmp) else end
+                )
+                timelines.append(
+                    fix_endpoints(
+                        fixables=fixables,
+                        reset_statements=reset_statements[index],
+                        end=actual_end,
+                    )
+                )
+
+            timelines = look_to_combine(timelines=timelines)
+        else:
+            pass
+
+        self.timelines = timelines
+        self.pgs_subtitle_items = self.__gen_pgs_subtitle_items(
+            timelines=self.timelines
+        )
 
     def __find_overlap(self, members: list[DisplaySet]) -> bool:
         """
@@ -503,145 +343,6 @@ class SubtitleGroup:
 
         return overlapping, reset_pos, redef_pos
 
-    def __process_timeline_item(
-        self,
-        new_timeline: TimelineItem,
-        timelines: dict[str, list[TimelineItem]],
-        ds: DisplaySet,
-        global_palettes: dict[int, list[Palette]],
-    ) -> dict[str, list[TimelineItem]]:
-        """
-        TimelineItems extracted from PGS subtitles have no correlation to their respective
-        counterparts coming before or after.
-
-        Process each item and extract the WindowID they are displayed in. If a prior item
-        already exists within the Timelines dict, check if they are the same item referenced
-        by their ID.
-
-        If its a new item, simply add it to the Timelines dict, else update prior items data
-        with current items data where required.
-
-        Returns
-        -------
-
-        dict
-            Timelines dict once a new item has been processed.
-        """
-        if new_timeline.position in timelines:
-            prev_timeline = timelines[new_timeline.position][-1]
-            prev_timeline.end = new_timeline.start
-
-            if new_timeline.comp_obj.object_id != prev_timeline.comp_obj.object_id:
-                if not new_timeline.palette:
-                    new_timeline.palette = prev_timeline.palette
-
-                if not new_timeline.display_obj:
-                    new_timeline.display_obj = prev_timeline.display_obj
-
-                timelines[new_timeline.position].append(new_timeline)
-        else:
-            if not new_timeline.palette:
-                new_timeline.palette = global_palettes[ds.pcs.palette_id]
-            timelines[new_timeline.position] = [new_timeline]
-
-        return timelines
-
-    def __gen_timelines(
-        self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
-    ) -> dict[str, list[TimelineItem]]:
-        """
-        Generate timelines. Timelines consist of TimelineItems and describe the changes
-        in either the Top or Bottom window of a PGS file. Items will be grouped as one
-        if they display the same image within the same position and will be treated as
-        new items if a new image is being defined.
-
-        Returns
-        -------
-
-        dict
-            Dictionary containing TimelineItems displayed in either Top or Bottom window.
-        """
-        timelines: dict[str, list[TimelineItem]] = {}
-
-        for ds in members:
-            for comp_obj in ds.pcs.composition_objects:
-                for window in ds.wds.windows:
-                    if window.window_id == comp_obj.window_id:
-                        new_timeline = TimelineItem(
-                            window_id=comp_obj.window_id,
-                            start=ds.pcs.presentation_timestamp,
-                            ds=ds,
-                        )
-                        timelines = self.__process_timeline_item(
-                            new_timeline, timelines, ds, global_palettes
-                        )
-
-        return timelines
-
-    def __fix_endpoints(
-        self,
-        fixables: dict[str, list[TimelineItem]],
-        reset_statements: DisplaySet,
-        end: DisplaySet,
-    ) -> dict[str, list[TimelineItem]]:
-        """
-        Reprocess dictionary containing TimelineItems displayed in either Top or Bottom window.
-        Since END & RESET segments do not define images within them, they will not be correlated
-        to a specific TimelineItem.
-
-        However they define the true end timestamp for the TimelineItem prior, so the items end
-        needs to be extended to match the END / RESET segments display timestamp.
-
-        Returns
-        -------
-
-        dict
-            Dictionary containing TimelineItems displayed in either Top or Bottom window.
-        """
-        for _, items in fixables.items():
-            fixable = items[-1]
-
-            if (
-                reset_statements.pcs.composition_objects
-                and fixable.comp_obj.object_id
-                != reset_statements.pcs.composition_objects[0].object_id
-            ):
-                fixable.end = reset_statements.pcs.presentation_timestamp
-            else:
-                fixable.end = end.pcs.presentation_timestamp
-
-        return fixables
-
-    def __combine(
-        self,
-        previous: dict[str, list[TimelineItem]],
-        current: dict[str, list[TimelineItem]],
-        pos: str,
-    ):
-        prev = previous[pos][-1]
-        curr = current[pos][0]
-        if (
-            prev.end == curr.start
-            and prev.comp_obj.object_id == curr.comp_obj.object_id
-        ):
-            if not curr.display_obj:
-                curr.display_obj = prev.display_obj
-
-    def __look_to_combine(
-        self, timelines: list[dict[str, list[TimelineItem]]]
-    ) -> list[dict[str, list[TimelineItem]]]:
-        previous: dict[str, list[TimelineItem]] | None = None
-        for timeline in timelines:
-            if previous is None:
-                previous = timeline
-                continue
-
-            self.__combine(previous=previous, current=timeline, pos="Bottom")
-            self.__combine(previous=previous, current=timeline, pos="Top")
-            previous = timeline
-
-        return timelines
-
     def __gen_pgs_subtitle_items(
         self, timelines: list[dict[str, list[TimelineItem]]]
     ) -> list[PgsSubtitleItem]:
@@ -747,11 +448,11 @@ class Pgs:
 
         # Debug helper code
         # test_groups = list(range(100, 112))
-        #test_groups = list(range(131, 159))
-        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        test_groups = list(range(131, 159))
+        sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        # self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
 
         return list(
             chain.from_iterable([

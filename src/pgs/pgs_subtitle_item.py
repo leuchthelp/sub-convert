@@ -2,10 +2,10 @@ import logging
 import typing
 
 from pgs.pgs_segments import (
-    PgsImage,
-    ObjectDefinitionSegment,
-    Palette,
     PresentationCompositionSegment,
+    ObjectDefinitionSegment,
+    PgsImage,
+    Palette,
 )
 
 
