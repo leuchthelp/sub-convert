@@ -4,7 +4,11 @@ import typing
 from pysrt import SubRipTime
 
 from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
-from pgs.pgs_segments import DisplaySet
+from pgs.pgs_segments import (
+    DisplaySet,
+    WindowDefinitionSegment,
+    PresentationCompositionSegment,
+)
 
 
 @dataclass
@@ -31,32 +35,35 @@ class TimelineItem:
     def __init__(
         self,
         start: SubRipTime,
+        comp_obj: PresentationCompositionSegment.CompositionObject | None = None,
+        window: WindowDefinitionSegment.Window | None = None,
         ds: DisplaySet | None = None,
         end: SubRipTime = SubRipTime(),
-        window_id: int = -1,
     ):
         self.start = start
         self.end = end  # will be overwritten by the following TimelineItem item
 
-        if ds is not None:
-            self.comp_obj = [
-                comp_obj
-                for comp_obj in ds.pcs.composition_objects
-                if comp_obj.window_id == window_id
-            ].pop()
+        if ds is not None and window is not None and comp_obj is not None:
+            self.comp_obj = comp_obj
 
-            # Full screen coordinates for PGS start in the top left;
-            # smaller offset = higher up | larger offset = lower down
-            self.position = (
-                "Top" if self.comp_obj.y_offset < ds.pcs.height / 2 else "Bottom"
-            )
-
+            # Get DisplayObject (i.e an image), can also be empty meaning
+            # it will reuse the image from the prior TimelineItem.
             display_obj_cand = [
                 display_obj
                 for display_obj in ds.ods_segments
                 if display_obj.id == self.comp_obj.object_id
             ]
             self.display_obj = display_obj_cand
+
+            # Full screen coordinates for PGS start in the top left;
+            # smaller offset = higher up | larger offset = lower down
+            position = "Bottom"
+            border = ds.pcs.height / 2
+            if window.height + self.comp_obj.y_offset < border:
+                position = "Top"
+
+            self.position = position
+
             self.palette = (
                 None if not ds.pds_segments else ds.pds_segments.pop().palettes
             )
@@ -221,7 +228,8 @@ def gen_timelines(
             for window in ds.wds.windows:
                 if window.window_id == comp_obj.window_id:
                     new_timeline = TimelineItem(
-                        window_id=comp_obj.window_id,
+                        window=window,
+                        comp_obj=comp_obj,
                         start=ds.pcs.presentation_timestamp,
                         ds=ds,
                     )
@@ -253,15 +261,15 @@ def fix_endpoints(
     """
     for _, items in fixables.items():
         fixable = items[-1]
-
-        if (
-            reset_statements.pcs.composition_objects
-            and fixable.comp_obj.object_id
-            != reset_statements.pcs.composition_objects[0].object_id
-        ):
-            fixable.end = reset_statements.pcs.presentation_timestamp
-        else:
+        if not reset_statements.pcs.composition_objects:
             fixable.end = end.pcs.presentation_timestamp
+            break
+
+        for obj in reset_statements.pcs.composition_objects:
+            if fixable.comp_obj.object_id != obj.object_id:
+                fixable.end = reset_statements.pcs.presentation_timestamp
+            else:
+                fixable.end = end.pcs.presentation_timestamp
 
     return fixables
 
@@ -287,8 +295,11 @@ def look_to_combine(
             previous = timeline
             continue
 
-        __combine(previous=previous, current=timeline, pos="Bottom")
-        __combine(previous=previous, current=timeline, pos="Top")
+        if "Bottom" in timeline:
+            __combine(previous=previous, current=timeline, pos="Bottom")
+
+        if "Top" in timeline:
+            __combine(previous=previous, current=timeline, pos="Top")
         previous = timeline
 
     return timelines

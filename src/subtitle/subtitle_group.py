@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from itertools import chain
+from collections import Counter
 import logging
 import typing
 import json
 import os
 
-from pgs.pgs_segments import PgsReader, DisplaySet, ObjectSequenceType
+from pgs.pgs_segments import PgsReader, DisplaySet
 from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
 from subtitle.timeline import (
     TimelineItem,
@@ -20,89 +20,140 @@ logger.setLevel(logging.INFO)
 
 
 @dataclass
-class FadeManager:
-    def __init__(self, members: list[DisplaySet]):
-        temp: dict[str, list[TimelineItem]] = {}
+class FadeHandler:
+    def __init__(
+        self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
+    ):
+        timelines: list[dict[str, list[TimelineItem]]] = []
 
-        fade_in_groups, leftover = self.__find_fade_in(members=members)
-        if fade_in_groups:
-            for group in fade_in_groups:
-                fade_range = [group[0], group[-1]]
+        # Check members for fade, repeat until all members have been checked
+        fade_groups, fade_pos = self.__find_fade(members)
 
-                selected = group[int(len(group) // 1.3)]
-                changeable = next(iter(temp.values()))[0]
-                changeable.display_obj = selected.ods_segments
-                if selected.pds_segments:
-                    changeable.palette = selected.pds_segments[0].palettes
+        if fade_pos:
+            for idx, group in enumerate(fade_groups):
+                if idx in fade_pos:
+                    timelines.append(self.__handle_fade(group))
                 else:
-                    changeable.palette
+                    tmp = gen_timelines(group[:-1], global_palettes)
+                    tmp = fix_endpoints(tmp, group[-1], group[-1])
+                    timelines.append(tmp)
 
-    def __find_fade_in(self, members: list[DisplaySet]):
-        fade_in_groups: list[list[DisplaySet]] = []
+        self.timelines = timelines
 
-        tmp = []
-        leftover = []
-        prev: DisplaySet | None = None
-        for ds in members:
-            end = ds.is_normal() and not ds.pcs.composition_objects
-            fade_in_type = (
-                ds.is_acquisition_point()
-                and ds.ods_segments[-1].sequence_type
-                == ObjectSequenceType.FIRST_AND_LAST
-            )
+    def __find_roi(self, members: list[DisplaySet]):
+        rois: list[list[DisplaySet]] = []
+        check, start, end = members[1:-1], members[0], members[-1]
+        # A region of interest (roi) in the context of a fade (in / out)
+        # lies between 2 segments which only consist of ACQUISITION_POINTS
+        # and a START or END segment.
+        # Within a fade the same image is displayed with varying levels of
+        # ALPHA, which causes the image to be identical in either height and
+        # width.
+        # Finding these regions should only require looking at the relative
+        # size of the ObjectDefinitionSegment and grouping them as such.
+        tmp: list[DisplaySet] = []
+        tmp.append(start)
+        for ds in check:
+            if not ds.is_acquisition_point():
+                tmp.append(ds)
+                rois.append(tmp)
+                tmp = [ds]
+                continue
 
-            image_matches = True
-            height_delta = -1
-            width_delta = -1
-            if prev is not None and (not ds.is_start() or not end):
-                try:
-                    height_delta = abs(
-                        prev.ods_segments[-1].height - ds.ods_segments[-1].height
-                    )
-                    width_delta = abs(
-                        prev.ods_segments[-1].width - ds.ods_segments[-1].width
-                    )
+            curr = ds.ods_segments[-1]
+            lead = tmp[0].ods_segments[-1]
 
-                    image_matches = False
-                    if height_delta <= 2 and width_delta <= 2:
-                        image_matches = True
-                except IndexError:
-                    image_matches = False
+            height_delta = abs(curr.height - lead.height)
+            width_delta = abs(curr.width - lead.width)
 
-            if fade_in_type or ds.is_start() or end:
-                if image_matches:
-                    tmp.append(ds)
-                    prev = ds
-                elif height_delta == 0 or width_delta == 0:
-                    fade_in_groups.append(tmp)
-                    tmp = []
-                    tmp.append(ds)
-                    prev = ds
-                else:
-                    leftover.append(ds)
+            if (
+                (curr.version == 0 or lead.version != curr.version)
+                and height_delta <= 2
+                and width_delta <= 2
+            ):
+                tmp.append(ds)
             else:
-                leftover.append(ds)
-                if len(tmp) > 7:
-                    fade_in_groups.append(tmp)
-                    tmp = []
+                tmp.append(ds)
+                rois.append(tmp)
+                tmp = [ds]
 
-        if len(tmp) > 7:
-            fade_in_groups.append(tmp)
+        if tmp:
+            rois.append(tmp)
+        rois[-1].append(end)
+        return rois
 
-        for idx, group in enumerate(fade_in_groups):
-            start, end = (
-                group[0].pcs.presentation_timestamp,
-                group[-1].pcs.presentation_timestamp,
-            )
+    def __find_fade(self, members: list[DisplaySet]):
+        fade_groups: list[list[DisplaySet]] = []
+        fade_pos: list[int] = []
+        fade_groups = self.__find_roi(members)
+
+        # Filter rios; within rois there might still not be a fade
+        # as such we need to filter them, based on the amount of time
+        # each DisplayObject is being shown. If it is being shown for
+        # less than half a second, most likely a fade is taking place
+        for idx, group in enumerate(fade_groups):
+            start = group[0].pcs.presentation_timestamp
+            end = group[-1].pcs.presentation_timestamp
+
             duration = end - start
-            delta = float(f"{duration.seconds}.{duration.milliseconds}") / len(
-                group[1:-1]
-            )
+            converted = float(f"{duration.seconds}.{duration.milliseconds}")
+            delta = converted / len(group)
 
-            if delta > 1.0:
-                fade_in_groups.pop(idx)
+            if not (len(group) <= 2 or delta > 0.5):
+                fade_pos.append(idx)
+                continue
 
-        return fade_in_groups, leftover
+        return fade_groups, fade_pos
+
+    def __select_best_image(
+        self, group: list[DisplaySet], item: TimelineItem, guess="IN"
+    ) -> TimelineItem:
+
+        selected: DisplaySet
+        match guess.lower():
+            case "in":
+                selected = group[-2]
+            case "out":
+                selected = group[0]
+            case _:
+                selected = group[len(group) // 2]
+
+        item.display_obj = selected.ods_segments
+        if selected.pds_segments:
+            item.palette = selected.pds_segments[0].palettes
+        else:
+            item.palette
+
+        return item
+
+    def __guess_fade_in_out(
+        self, group: list[DisplaySet], item: TimelineItem
+    ) -> TimelineItem:
+        guess = "Unknown"
+
+        start = group[0].ods_segments[-1]
+        end = group[-2].ods_segments[-1]
+
+        if start.data_len > end.data_len:
+            guess = "OUT"
+
+        if end.data_len > start.data_len:
+            guess = "IN"
+
+        item = self.__select_best_image(group, item, guess)
+        return item
+
+    def __handle_fade(self, group: list[DisplaySet]):
+        comp_obj = group[0].pcs.composition_objects[-1]
+        window = group[0].wds.windows[-1]
+        t_start = group[0].pcs.presentation_timestamp
+        t_end = group[-1].pcs.presentation_timestamp
+        new_item = TimelineItem(t_start, comp_obj, window, group[0], t_end)
+
+        new_item = self.__guess_fade_in_out(group, new_item)
+
+        new_timeline = {new_item.position: [new_item]}
+        return new_timeline
 
 
 @dataclass
@@ -122,7 +173,7 @@ class SubtitleGroup:
         List of DisplaySets the SubtitleGroup wraps around.
     """
 
-    __slots__ = ("pgs_subtitle_items", "timelines", "overlap")
+    __slots__ = ("pgs_subtitle_items", "timelines", "overlap", "occurrences")
 
     def __init__(
         self,
@@ -167,7 +218,20 @@ class SubtitleGroup:
 
             timelines = look_to_combine(timelines=timelines)
         else:
-            pass
+            fade_hint = len(members) > 5
+
+            if fade_hint:
+                fade_handler = FadeHandler(members, global_palettes)
+                timelines = timelines + fade_handler.timelines
+
+            if not timelines:
+                for idx, ds in enumerate(members):
+                    if ds is end:
+                        break
+
+                    tmp = gen_timelines([ds], global_palettes)
+                    tmp = fix_endpoints(tmp, members[idx + 1], end)
+                    timelines.append(tmp)
 
         self.timelines = timelines
         self.pgs_subtitle_items = self.__gen_pgs_subtitle_items(
@@ -213,8 +277,8 @@ class SubtitleGroup:
             or intermediate with varying IDs.
         """
         global_palettes: dict[int, list[Palette]] = {}
-        for member in members:
-            for pds_segment in member.pds_segments:
+        for ds in members:
+            for pds_segment in ds.pds_segments:
                 if pds_segment.palette_id not in global_palettes:
                     global_palettes[pds_segment.palette_id] = pds_segment.palettes
         return global_palettes
@@ -357,11 +421,13 @@ class SubtitleGroup:
             List containing PgsSubtitleItems which will eventual contain the text extracted from
             the PGS image.
         """
+        self.occurrences = Counter()
         items: list[PgsSubtitleItem] = []
 
         for timeline in timelines:
             for _, entries in timeline.items():
                 for element in entries:
+                    self.occurrences.update((element.position,))
                     items.append(element.gen_pgs_subtitle_item())
         return items
 
@@ -381,7 +447,13 @@ class Pgs:
         Only necessary for debugging. Directory where to dump the metadata. Defaults to \"tmp\"
     """
 
-    __slots__ = ("tmp_location", "temp_folder", "_items", "subtitle_groups")
+    __slots__ = (
+        "tmp_location",
+        "temp_folder",
+        "_items",
+        "subtitle_groups",
+        "occurrences",
+    )
 
     def __init__(
         self,
@@ -391,6 +463,7 @@ class Pgs:
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
         self._items: typing.Optional[list[PgsSubtitleItem]] = None
+        self.occurrences: Counter[str] = Counter()
 
     @property
     def items(self) -> list[PgsSubtitleItem]:
@@ -447,18 +520,19 @@ class Pgs:
                 tmp = []
 
         # Debug helper code
-        # test_groups = list(range(100, 112))
-        test_groups = list(range(131, 159))
-        sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        # test_groups = list(range(82, 131))
+        # test_groups = list(range(131, 159))
+        # test_groups = list(range(315, 323))
+        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
-        # self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
+        res: list[PgsSubtitleItem] = []
+        for group in self.subtitle_groups:
+            self.occurrences.update(group.occurrences)
+            res += group.pgs_subtitle_items
 
-        return list(
-            chain.from_iterable([
-                group.pgs_subtitle_items for group in self.subtitle_groups
-            ])
-        )
+        return res
 
     def dump_display_sets(self, display_sets: list[DisplaySet], path=""):
         """

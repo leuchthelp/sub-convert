@@ -11,8 +11,9 @@ from src.pgs.pgs_segments import PgsReader
 
 tmp_location = Path("tests/files/for-pgs/test.sup")
 if not tmp_location.exists():
-    with py7zr.SevenZipFile("tests/files/for-pgs/test.7z", mode='r') as archive:
+    with py7zr.SevenZipFile("tests/files/for-pgs/test.7z", mode="r") as archive:
         archive.extractall(path="tests/files/for-pgs/")
+
 
 def test_pgs():
     pgs = Pgs(tmp_location=str(tmp_location))
@@ -43,10 +44,14 @@ def test_timeline_item():
     with open(str(tmp_location), "+rb") as data:
         display_sets = list(PgsReader.decode(data.read()))
 
-    item = TimelineItem(start=SubRipTime(), ds=display_sets[0], window_id=0)
+    ds = display_sets[0]
+    comp_obj = ds.pcs.composition_objects[-1]
+    window = ds.wds.windows[-1]
+    item = TimelineItem(start=SubRipTime(), comp_obj=comp_obj, window=window, ds=ds)
 
     assert item.gen_pgs_subtitle_item().height == 51
     assert item.gen_pgs_subtitle_item().width == 435
+
 
 def test_last():
     tmp_location.unlink()

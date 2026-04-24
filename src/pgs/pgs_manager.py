@@ -59,7 +59,7 @@ class PgsManager:
             shutil.rmtree(self.tmp_path)
         self.tmp_path.mkdir(parents=True)
 
-        self.pgs = None
+        self.pg: Pgs
 
     def get_pgs_images(self) -> list[tuple[Image.Image, PgsSubtitleItem]]:
         tmp_file = (
@@ -99,9 +99,10 @@ class PgsManager:
                 # This could help detection.
                 image = Image.fromarray(item.image.data)
                 rgb = image.im.getpixel((0, 0))
-                
+
                 image = ImageOps.expand(image=image, border=10, fill=rgb)
-                #image = ImageOps.invert(image)
+                # image = ImageOps.invert(image)
+                image = image.convert("L")
                 final.append((image, item))
 
             if self.dump_debug:
@@ -301,10 +302,7 @@ class PgsManager:
 
     def save_file(self, export_as: str = "srt"):
 
-        subtitle_groups: list[SubtitleGroup] = []
-        if self.pgs is not None:
-            subtitle_groups = self.pgs.subtitle_groups
-
+        subtitle_groups = self.pgs.subtitle_groups
         if self.dump_debug:
             self.__debug_vis_timelines(subtitle_groups=subtitle_groups)
 
@@ -330,8 +328,12 @@ class PgsManager:
         final_lang = track.language_ietf if track.language_ietf is not None else ""
         final_lang = max(average, key=average.get)  # type: ignore
 
-        forced = bool(track.forced_track or len(items) <= 150)
         path = path + ".sdh" if track.flag_hearing_impaired else ""
+
+        forced = False
+        highest_occu = self.pgs.occurrences.most_common(1)[0][0]
+        if highest_occu == "Top" or len(items) <= 150:
+            forced = True
         path = path + ".forced" if forced else ""
 
         if track.language_ietf == final_lang:
