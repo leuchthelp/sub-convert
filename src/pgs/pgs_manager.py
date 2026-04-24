@@ -98,12 +98,16 @@ class PgsManager:
                 # Also invert as black-outline texts is saved inverted (as white-outline).
                 # This could help detection.
                 image = Image.fromarray(item.image.data)
-                rgb = image.im.getpixel((0, 0))
 
-                image = ImageOps.expand(image=image, border=10, fill=rgb)
-                # image = ImageOps.invert(image)
-                image = image.convert("L")
-                final.append((image, item))
+                image_b = Image.new(
+                    "RGBA", (image.width, image.height), color=(123, 123, 123)
+                )
+                image_b.paste(image, (0, 0), mask=image)
+
+                rgb = image_b.im.getpixel((-1, -1))
+                image_b = ImageOps.expand(image=image_b, border=10, fill=rgb)
+                image_b = image_b.convert("L")
+                final.append((image_b, item))
 
             if self.dump_debug:
                 image_path = Path(f"{path}/images")

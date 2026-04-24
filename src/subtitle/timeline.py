@@ -65,7 +65,7 @@ class TimelineItem:
             self.position = position
 
             self.palette = (
-                None if not ds.pds_segments else ds.pds_segments[ds.pcs.palette_id].palettes
+                None if not ds.pds_segments else ds.pds_segments.pop().palettes
             )
 
         self.pgs_subtitle_item: PgsSubtitleItem | None
