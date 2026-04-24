@@ -271,6 +271,11 @@ def fix_endpoints(
             else:
                 fixable.end = end.pcs.presentation_timestamp
 
+        for display in reset_statements.ods_segments:
+            if display.id == fixable.comp_obj.object_id:
+                fixable.end = reset_statements.pcs.presentation_timestamp
+                break
+
     return fixables
 
 
