@@ -22,7 +22,7 @@ logger.setLevel(logging.INFO)
 @dataclass
 class FadeHandler:
     def __init__(
-        self, members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
+        self, members: list[DisplaySet], global_palettes: dict[int, list[list[Palette]]]
     ):
         timelines: list[dict[str, list[TimelineItem]]] = []
 
@@ -182,7 +182,7 @@ class SubtitleGroup:
         self.overlap = self.__find_overlap(members=members)
 
         end = members[-1]
-        global_palettes: dict[int, list[Palette]] = {}
+        global_palettes: dict[int, list[list[Palette]]] = {}
         global_palettes = self.__find_global_palettes(members=members)
 
         timelines: list[dict[str, list[TimelineItem]]] = []
@@ -264,7 +264,7 @@ class SubtitleGroup:
 
     def __find_global_palettes(
         self, members: list[DisplaySet]
-    ) -> dict[int, list[Palette]]:
+    ) -> dict[int, list[list[Palette]]]:
         """
         Grab all Palette defined at either EPOCH_START, ACQUISITION_POINT or intermediate with
         varying IDs.
@@ -276,11 +276,13 @@ class SubtitleGroup:
             Contains all Palettes found in the global Palette definition at ACQUISITION_POINT
             or intermediate with varying IDs.
         """
-        global_palettes: dict[int, list[Palette]] = {}
+        global_palettes: dict[int, list[list[Palette]]] = {}
         for ds in members:
             for pds_segment in ds.pds_segments:
                 if pds_segment.palette_id not in global_palettes:
-                    global_palettes[pds_segment.palette_id] = pds_segment.palettes
+                    global_palettes[pds_segment.palette_id] = [pds_segment.palettes]
+                else:
+                    global_palettes[pds_segment.palette_id].append(pds_segment.palettes)
         return global_palettes
 
     def __find_reset_positions(self, members: list[DisplaySet]) -> list[int]:

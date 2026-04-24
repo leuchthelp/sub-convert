@@ -65,7 +65,7 @@ class TimelineItem:
             self.position = position
 
             self.palette = (
-                None if not ds.pds_segments else ds.pds_segments.pop().palettes
+                None if not ds.pds_segments else ds.pds_segments[ds.pcs.palette_id].palettes
             )
 
         self.pgs_subtitle_item: PgsSubtitleItem | None
@@ -167,7 +167,7 @@ def __process_timeline_item(
     new_timeline: TimelineItem,
     timelines: dict[str, list[TimelineItem]],
     ds: DisplaySet,
-    global_palettes: dict[int, list[Palette]],
+    global_palettes: dict[int, list[list[Palette]]],
 ) -> dict[str, list[TimelineItem]]:
     """
     TimelineItems extracted from PGS subtitles have no correlation to their respective
@@ -200,14 +200,14 @@ def __process_timeline_item(
             timelines[new_timeline.position].append(new_timeline)
     else:
         if not new_timeline.palette:
-            new_timeline.palette = global_palettes[ds.pcs.palette_id]
+            new_timeline.palette = global_palettes[ds.pcs.palette_id][0]
         timelines[new_timeline.position] = [new_timeline]
 
     return timelines
 
 
 def gen_timelines(
-    members: list[DisplaySet], global_palettes: dict[int, list[Palette]]
+    members: list[DisplaySet], global_palettes: dict[int, list[list[Palette]]]
 ) -> dict[str, list[TimelineItem]]:
     """
     Generate timelines. Timelines consist of TimelineItems and describe the changes
