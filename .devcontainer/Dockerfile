@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.14_pytorch_2.10.0
+FROM rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
 
 
 RUN apt-get clean && apt-get update && apt-get install -y locales
@@ -18,4 +18,4 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
 RUN . /opt/venv/bin/activate
 RUN git clone https://github.com/ROCm/flash-attention.git &&\ 
     cd flash-attention &&\
-    python setup.py install
+    FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" pip install --no-build-isolation .
