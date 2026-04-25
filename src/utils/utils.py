@@ -2,7 +2,10 @@ from pysrt import SubRipTime
 
 
 def from_hex(b: bytes):
-    return int(b.hex(), base=16)
+    try:
+        return int(b.hex(), base=16)
+    except ValueError:
+        return -1
 
 
 def safe_get(b: bytes, i: int, default_value=0):
