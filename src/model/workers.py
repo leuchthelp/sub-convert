@@ -5,7 +5,6 @@ import logging
 import typing
 
 from torch.multiprocessing import current_process, Queue
-from colorama import Fore
 
 from pgs.pgs_manager import PgsManager, PgsSubtitleItem
 from model.language_model_core import LanguageModelCore
@@ -83,8 +82,6 @@ class LanguageGPUWorker:
             text = str(original_text).lower()
             combined = self.core.get_topk(text=text)
             self.queues[return_queue].put((original_text, combined, idx))
-
-        logger.debug(Fore.MAGENTA + "LanguageGPUWorker ended" + Fore.RESET)
 
     def __del__(self):
         del self.core
