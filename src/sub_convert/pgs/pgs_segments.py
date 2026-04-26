@@ -6,7 +6,7 @@ import enum
 from numpy import ndarray
 import numpy as np
 
-from src.utils.utils import from_hex, safe_get, to_time
+from ..utils.utils import from_hex, safe_get, to_time
 
 
 logger = logging.getLogger(__name__)

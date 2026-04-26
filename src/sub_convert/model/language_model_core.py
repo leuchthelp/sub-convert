@@ -99,7 +99,7 @@ class LanguageModelCore:
 
 import torch  # noqa: E402
 
-from src.utils.torch_utils import check_torch_cuda  # noqa: E402
+from ..utils.torch_utils import check_torch_cuda  # noqa: E402
 
 
 @dataclass

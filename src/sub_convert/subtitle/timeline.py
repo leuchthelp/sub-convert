@@ -3,8 +3,8 @@ import typing
 
 from pysrt import SubRipTime
 
-from pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
-from pgs.pgs_segments import (
+from ..pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
+from ..pgs.pgs_segments import (
     DisplaySet,
     WindowDefinitionSegment,
     PresentationCompositionSegment,

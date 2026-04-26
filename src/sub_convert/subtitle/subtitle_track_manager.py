@@ -5,7 +5,7 @@ import typing
 
 from pymkv import MKVFile
 
-from pgs.pgs_manager import PgsManager
+from ..pgs.pgs_manager import PgsManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

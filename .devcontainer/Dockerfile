@@ -16,4 +16,4 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
 RUN . /opt/venv/bin/activate
 RUN git clone https://github.com/ROCm/flash-attention.git &&\ 
     cd flash-attention &&\
-    FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" pip install --no-build-isolation .
+    FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" pip install --no-deps --no-build-isolation .

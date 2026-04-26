@@ -14,8 +14,8 @@ from langcodes import Language
 from pymkv import MKVTrack
 import numpy as np
 
-from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
-from pgs.pgs_subtitle_item import PgsSubtitleItem
+from ..subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
+from ..pgs.pgs_subtitle_item import PgsSubtitleItem
 
 
 logger = logging.getLogger(__name__)
@@ -182,10 +182,12 @@ class PgsManager:
 
     def __timeline_events(self, timeline: dict[str, list[TimelineItem]]):
         tmp = list(
-            chain.from_iterable([
-                (item.start, item.end)
-                for item in chain.from_iterable(timeline.values())
-            ])
+            chain.from_iterable(
+                [
+                    (item.start, item.end)
+                    for item in chain.from_iterable(timeline.values())
+                ]
+            )
         )
 
         timeline_events: list[SubRipTime] = []

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from src.model import ocr_model_core, language_model_core
-from main import (
+from cli import (
     check_if_adjacent_exists,
     check_aged,
     get_candidates,
@@ -16,14 +16,14 @@ from main import (
 def test_check_aged_pos_offset():
     path = Path("tests/files/for-main/test-adjacent-exists.srt")
     assert check_aged(path, offset="s+1") is True
-    #assert check_aged(path, offset="+1") is True
-    #assert check_aged(path, offset="1") is True
+    # assert check_aged(path, offset="+1") is True
+    # assert check_aged(path, offset="1") is True
 
 
 def test_check_aged_neg_offset():
     path = Path("tests/files/for-main/test-adjacent-exists.srt")
     assert check_aged(path, offset="s-1") is False
-    #assert check_aged(path, offset="-1") is False
+    # assert check_aged(path, offset="-1") is False
 
 
 @pytest.mark.parametrize(
