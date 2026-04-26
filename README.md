@@ -1,6 +1,6 @@
 # sub-convert
 
-![](files/example.png)
+![](docs/files/example.png)
 
 **WARNING** current only tested for AMD GPUs and CPU, needs testing for other vendors, see the [Installation guide](quick-start#installation-guide) 
 
