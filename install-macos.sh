@@ -1,3 +1,5 @@
+brew install tesseract mkvtoolnix
+
 source $HOME/.local/bin/env
 
 uv venv --allow-existing 
