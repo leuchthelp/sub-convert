@@ -14,8 +14,8 @@ from langcodes import Language
 from pymkv import MKVTrack
 import numpy as np
 
-from subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
-from pgs.pgs_subtitle_item import PgsSubtitleItem
+from ..subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
+from ..pgs.pgs_subtitle_item import PgsSubtitleItem
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class PgsManager:
             shutil.rmtree(self.tmp_path)
         self.tmp_path.mkdir(parents=True)
 
-        self.pgs = None
+        self.pg: Pgs
 
     def get_pgs_images(self) -> list[tuple[Image.Image, PgsSubtitleItem]]:
         tmp_file = (
@@ -98,11 +98,16 @@ class PgsManager:
                 # Also invert as black-outline texts is saved inverted (as white-outline).
                 # This could help detection.
                 image = Image.fromarray(item.image.data)
-                rgb = image.im.getpixel((0, 0))
-                
-                image = ImageOps.expand(image=image, border=10, fill=rgb)
-                #image = ImageOps.invert(image)
-                final.append((image, item))
+
+                image_b = Image.new(
+                    "RGBA", (image.width, image.height), color=(123, 123, 123)
+                )
+                image_b.paste(image, (0, 0), mask=image)
+
+                rgb = image_b.im.getpixel((-1, -1))
+                image_b = ImageOps.expand(image=image_b, border=10, fill=rgb)
+                image_b = image_b.convert("L")
+                final.append((image_b, item))
 
             if self.dump_debug:
                 image_path = Path(f"{path}/images")
@@ -177,10 +182,12 @@ class PgsManager:
 
     def __timeline_events(self, timeline: dict[str, list[TimelineItem]]):
         tmp = list(
-            chain.from_iterable([
-                (item.start, item.end)
-                for item in chain.from_iterable(timeline.values())
-            ])
+            chain.from_iterable(
+                [
+                    (item.start, item.end)
+                    for item in chain.from_iterable(timeline.values())
+                ]
+            )
         )
 
         timeline_events: list[SubRipTime] = []
@@ -301,10 +308,7 @@ class PgsManager:
 
     def save_file(self, export_as: str = "srt"):
 
-        subtitle_groups: list[SubtitleGroup] = []
-        if self.pgs is not None:
-            subtitle_groups = self.pgs.subtitle_groups
-
+        subtitle_groups = self.pgs.subtitle_groups
         if self.dump_debug:
             self.__debug_vis_timelines(subtitle_groups=subtitle_groups)
 
@@ -330,8 +334,12 @@ class PgsManager:
         final_lang = track.language_ietf if track.language_ietf is not None else ""
         final_lang = max(average, key=average.get)  # type: ignore
 
-        forced = bool(track.forced_track or len(items) <= 150)
         path = path + ".sdh" if track.flag_hearing_impaired else ""
+
+        forced = False
+        highest_occu = self.pgs.occurrences.most_common(1)[0][0]
+        if highest_occu == "Top" or len(items) <= 150:
+            forced = True
         path = path + ".forced" if forced else ""
 
         if track.language_ietf == final_lang:

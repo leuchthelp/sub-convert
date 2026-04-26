@@ -1,11 +1,11 @@
 import logging
 import typing
 
-from pgs.pgs_segments import (
-    PgsImage,
-    ObjectDefinitionSegment,
-    Palette,
+from ..pgs.pgs_segments import (
     PresentationCompositionSegment,
+    ObjectDefinitionSegment,
+    PgsImage,
+    Palette,
 )
 
 

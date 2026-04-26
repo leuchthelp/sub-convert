@@ -3,11 +3,10 @@ import logging
 import typing
 import enum
 
-from PIL import Image, ImageOps
 from numpy import ndarray
 import numpy as np
 
-from src.utils.utils import from_hex, safe_get, to_time
+from ..utils.utils import from_hex, safe_get, to_time
 
 
 logger = logging.getLogger(__name__)
@@ -406,19 +405,19 @@ class ObjectDefinitionSegment(BaseSegment):
     def data_len(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[4:7])
-        return None
+        return 0
 
     @property
     def width(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[7:9])
-        return None
+        return 0
 
     @property
     def height(self):
         if self.sequence_type != ObjectSequenceType.LAST:
             return from_hex(self.data[9:11])
-        return None
+        return 0
 
     @property
     def img_data(self):

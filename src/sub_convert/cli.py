@@ -22,9 +22,9 @@ from rich.progress import (
 from rich.progress import TaskID, Task
 
 
-from src.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
-from src.subtitle.subtitle_track_manager import SubtitleTrackManager
-from src.model import ocr_model_core, language_model_core
+from .model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
+from .subtitle.subtitle_track_manager import SubtitleTrackManager
+from .model import ocr_model_core, language_model_core
 
 
 logging.basicConfig(
@@ -134,7 +134,7 @@ def import_class(class_name: str, module_name: str):
     return class_
 
 
-def main():
+def sub_convert():
     ocr_classes = get_classes(ocr_model_core)
     lang_classes = get_classes(language_model_core)
 
@@ -232,7 +232,7 @@ def main():
     if not tmp_path.exists():
         tmp_path.mkdir()
     options = {
-        "path_to_tmp": "tmp",
+        "path_to_tmp": tmp_path,
         "overwrite_if_exists": args.overwrite,
         "skip_if_existing": args.skip_if_exists,
         "convert_aged": args.convert_aged,
@@ -250,7 +250,7 @@ def main():
         )
     )
 
-    #pgs_managers = [list(pgs_managers)[0]]
+    # pgs_managers = [list(pgs_managers)[0]]
 
     # Setup ocr prompt and message template
     ocr_task = "ocr"
@@ -397,7 +397,3 @@ def main():
         for process in processes:
             process.join()
             process.close()
-
-
-if __name__ == "__main__":
-    main()
