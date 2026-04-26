@@ -38,3 +38,4 @@ site
 !tests/files/for-main/test-adjacent-exists.srt
 !tests/files/for-main/test-no-adjacent.mkv
 !tests/files/for-pgs/test.7z
+!docs/files/example.png
