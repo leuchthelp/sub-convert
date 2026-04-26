@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.model import ocr_model_core, language_model_core
-from cli import (
+from sub_convert.model import ocr_model_core, language_model_core
+from sub_convert.cli import (
     check_if_adjacent_exists,
     check_aged,
     get_candidates,

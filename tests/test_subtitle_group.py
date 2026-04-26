@@ -3,10 +3,10 @@ from pathlib import Path
 from pysrt import SubRipTime
 import py7zr
 
-from src.subtitle.subtitle_group import SubtitleGroup
-from src.subtitle.subtitle_group import TimelineItem
-from src.subtitle.subtitle_group import Pgs
-from src.pgs.pgs_segments import PgsReader
+from sub_convert.subtitle.subtitle_group import SubtitleGroup
+from sub_convert.subtitle.subtitle_group import TimelineItem
+from sub_convert.subtitle.subtitle_group import Pgs
+from sub_convert.pgs.pgs_segments import PgsReader
 
 
 tmp_location = Path("tests/files/for-pgs/test.sup")

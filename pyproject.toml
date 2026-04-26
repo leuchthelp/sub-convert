@@ -25,6 +25,7 @@ plotly = [
 
 [dependency-groups]
 dev = [
+    "py7zr>=1.1.0",
     "pytest>=9.0.3",
     "ruff>=0.15.12",
 ]
