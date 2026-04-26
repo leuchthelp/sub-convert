@@ -4,28 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "langcodes>=3.5.1",
-    "lingua-language-detector>=2.2.0",
-    "pillow>=12.2.0",
-    "pymkv2>=2.2.0.post2",
-    "pysrt>=1.1.2",
-    "pytesseract>=0.3.13",
-    "rich>=15.0.0",
-]
-
+dependencies = []
 
 [project.scripts]
 sub-convert = "sub_convert.cli:sub_convert"
-
-[project.optional-dependencies]
-plotly = [
-    "kaleido>=1.2.0",
-]
-
-[dependency-groups]
-dev = [
-    "py7zr>=1.1.0",
-    "pytest>=9.0.3",
-    "ruff>=0.15.12",
-]
