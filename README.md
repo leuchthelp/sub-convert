@@ -57,6 +57,9 @@ or
 
 uv run sub-convert -p test-files
 ```
+To optimize on resource usage the tool utilizes generators and draws files to convert lazily when needed.
+
+This however, results in the tool not being able to tell how many files it will convert in total and if it has converted any to begin with. If it exists without an error while not showing a single progressbar, it most likely has not found any files to convert. In that case make sure to check if the path you have given sub-convert is accessible.
 
 When files are being saved, existing files can also be override by specifying:
 
