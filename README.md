@@ -2,7 +2,7 @@
 
 ![](docs/files/example.png)
 
-**WARNING** current only tested for AMD GPUs and CPU, needs testing for other vendors, see the [Installation guide](quick-start#installation-guide) 
+**WARNING** current only tested for AMD GPUs and CPU, needs testing for other vendors, see the [Installation guide](https://leuchthelp.github.io/sub-convert/quick-start/#installation-guide) 
 
 sub-convert is a simple project inspired by [pgsrip](https://github.com/ratoaq2/pgsrip) by [ratoaq2](https://github.com/ratoaq2). It is meant to convert PGS (image-based) subtitles to SRT (text-based) subtitles using a shared OCR model which `N` processes can request `image-to-text` conversion from. 
 
