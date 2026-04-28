@@ -57,11 +57,12 @@ class PgsManager:
 
         if self.tmp_path.exists():
             shutil.rmtree(self.tmp_path)
-        self.tmp_path.mkdir(parents=True)
+        
 
         self.pg: Pgs
 
     def get_pgs_images(self) -> list[tuple[Image.Image, PgsSubtitleItem]]:
+        self.tmp_path.mkdir(parents=True)
         tmp_file = (
             f"{self.tmp_path}/{self.mkv_track.file_path}"
             + f"-{self.mkv_track.track_id}-{self.mkv_track.track_codec}.sup"

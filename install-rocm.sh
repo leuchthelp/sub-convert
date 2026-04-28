@@ -12,7 +12,7 @@ uv pip install --pre torch torchvision --index-url https://download.pytorch.org/
 FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" uv pip install https://github.com/ROCm/flash-attention.git --no-build-isolation
 
 # Setup general packages
-uv pip install pysrt pymkv2 pillow pytesseract rich langcodes lingua-language-detector
+uv pip install pysrt pymkv2 pillow pytesseract rich langcodes lingua-language-detector colorama
 uv pip install transformers accelerate
 
 # Setup devel packages
