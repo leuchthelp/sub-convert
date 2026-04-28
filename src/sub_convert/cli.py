@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from threading import Thread, Event
 from itertools import chain
 from pathlib import Path
 import importlib
@@ -9,7 +10,7 @@ import os
 import re
 
 
-from torch.multiprocessing import Process, Manager, Pool, set_start_method
+from torch.multiprocessing import Process, Queue, Manager, Pool, set_start_method
 from rich.progress import (
     Progress,
     TextColumn,
@@ -20,6 +21,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.progress import TaskID, Task
+import torch.multiprocessing as mp
 
 
 from .model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
@@ -126,6 +128,53 @@ def get_classes(module) -> list[str]:
         for _, cls in inspect.getmembers(module, inspect.isclass)
         if cls.__module__ == module.__name__
     ]
+
+
+def progress_bar(task_queue: Queue, progress_queue: Queue, event: Event):
+    tasks: dict[str, tuple[TaskID, Task]] = {}
+    end = False
+
+    # Setup rich progressbar
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        MofNCompleteColumn(),
+        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+    )
+    with progress:
+        while not end:
+            try:
+                description, total = task_queue.get_nowait()
+                task_id = progress.add_task(
+                    description=description, total=total, visible=True
+                )
+
+                task = progress.tasks[int(task_id)]
+                tasks[description] = (task_id, task)
+            except Exception:
+                pass
+
+            try:
+                description = progress_queue.get_nowait()
+                if description in tasks:
+                    task_id = tasks[description][0]
+                    progress.update(
+                        task_id=task_id, advance=1, visible=True
+                    )
+
+                    task = tasks[description][1]
+                    if task.finished:
+                        progress.update(
+                            task_id=task.id, refresh=True, visible=False
+                        )
+            except Exception:
+                pass
+            
+            if event.is_set():
+                if progress.finished and tasks:
+                    end = True
 
 
 def import_class(class_name: str, module_name: str):
@@ -272,16 +321,6 @@ def sub_convert():
     except RuntimeError:
         pass
 
-    # Setup rich progressbar
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        MofNCompleteColumn(),
-        TimeRemainingColumn(),
-        TimeElapsedColumn(),
-    )
-
     # Setup gpu processes and queues used for communication
     progress_manager = Manager()
     gpu_manager = Manager()
@@ -305,21 +344,24 @@ def sub_convert():
     ):
         queues[f"{index}"] = progress_manager.Queue()
 
+    gpu_event = mp.Event()
+
     gpu_ocr_batchsize = 1
     gpu_ocr_processes: list[Process] = []
     gpu_core_class = import_class(args.ocr_model_core, ocr_model_core.__name__)
     gpu_core = gpu_core_class(options=options)
     for idx in range(0, gpu_ocr_workers):
-        gpu_ocr_processes.append(
-            Process(
-                target=OCRGPUWorker(core=gpu_core, queues=queues).run,
+        cess = Process(
+                target=OCRGPUWorker(gpu_core, queues).run, # type: ignore
                 name=f"OCRGPU{idx}",
                 args=(
                     message_template,
+                    gpu_event,
                     gpu_ocr_batchsize,
                 ),
             )
-        )
+
+        gpu_ocr_processes.append(cess)
     del gpu_core
 
     gpu_lang_batchsize = 1
@@ -329,71 +371,40 @@ def sub_convert():
     )
     lang_core = language_core_class(options=options)
     for idx in range(0, gpu_lang_workers):
-        gpu_lang_processes.append(
-            Process(
-                target=LanguageGPUWorker(core=lang_core, queues=queues).run,
+        cess = Process(
+                target=LanguageGPUWorker(lang_core, queues).run, # type: ignore
                 name=f"LanguageGPU{idx}",
-                args=(gpu_lang_batchsize,),
+                args=(gpu_event, gpu_lang_batchsize, ),
             )
-        )
+
+        gpu_lang_processes.append(cess)
     del lang_core
 
     processes = gpu_ocr_processes + gpu_lang_processes
 
+    task_queue = queues["task_queue"]
+    progress_queue = queues["progress_queue"]
+    event = Event()
+    thread = Thread(target=progress_bar, args=(task_queue, progress_queue, event,))
+
     try:
         for process in processes:
             process.start()
+        thread.start()
 
-        runnable = CPUWorker(queues=queues)
-        with progress:
-            with Pool(processes=cpu_workers) as pool:
-                tasks: dict[str, tuple[TaskID, Task]] = {}
-                task_queue = queues["task_queue"]
-                progress_queue = queues["progress_queue"]
-                del queues
-
-                for _ in pool.imap_unordered(runnable.run, pgs_managers):
-                    end = False
-                    while not end:
-                        try:
-                            description, total = task_queue.get_nowait()
-                            task_id = progress.add_task(
-                                description=description, total=total, visible=True
-                            )
-
-                            task = progress.tasks[int(task_id)]
-                            tasks[description] = (task_id, task)
-                        except Exception:
-                            pass
-
-                        try:
-                            description = progress_queue.get_nowait()
-                            if description in tasks:
-                                task_id = tasks[description][0]
-                                progress.update(
-                                    task_id=task_id, advance=1, visible=True
-                                )
-
-                                task = tasks[description][1]
-                                if task.finished:
-                                    progress.update(
-                                        task_id=task.id, refresh=True, visible=False
-                                    )
-                        except Exception:
-                            pass
-
-                        # There should at least be a couple of tasks present, before we
-                        # consider our progress finished. Otherwise if the tool is tool
-                        # slow, it will immediately end the update loop
-                        if progress.finished and tasks:
-                            end = True
-
+        runnable = CPUWorker(queues=queues) # type: ignore
+        del queues
+        with Pool(processes=cpu_workers) as pool:
+            for _ in pool.imap_unordered(runnable.run, pgs_managers):
+                pass
     except KeyboardInterrupt:
         pass
 
     finally:
+        event.set() 
+        thread.join()
+        gpu_event.set()
         for process in processes:
             process.terminate()
-        for process in processes:
             process.join()
             process.close()

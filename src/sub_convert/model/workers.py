@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class OCRGPUWorker:
-    __slots__ = ("process_queue", "pass_queue", "message_template", "core")
+    __slots__ = ("process_queue", "pass_queue", "core")
 
     def __init__(
         self,
@@ -29,11 +29,13 @@ class OCRGPUWorker:
         self.core = core
         del queues
 
-    def run(self, message_template: list, batch_size=16):
-        last_run_on_track = False
+    def run(self, message_template: list, event, batch_size=16):
         batch = []
         memory: dict[int, tuple[str, int]] = {}
-        while True:
+
+        last_run_on_track = False
+        end = False
+        while not end:
             try:
                 if not last_run_on_track:
                     image, return_queue, idx = self.process_queue.get()
@@ -53,6 +55,9 @@ class OCRGPUWorker:
 
                         batch.clear()
                         memory.clear()
+                
+                if event.is_set():
+                    end = True
             except Exception:
                 batch_size = len(batch)
                 last_run_on_track = True
@@ -74,7 +79,7 @@ class LanguageGPUWorker:
         self.queues = queues
         self.core = core
 
-    def run(self, batch_size=16):
+    def run(self, event, batch_size=16):
         end = False
         while not end:
             original_text, return_queue, idx = self.pass_queue.get()
@@ -82,6 +87,9 @@ class LanguageGPUWorker:
             text = str(original_text).lower()
             combined = self.core.get_topk(text=text)
             self.queues[return_queue].put((original_text, combined, idx))
+
+            if event.is_set():
+                end = True
 
     def __del__(self):
         del self.core
