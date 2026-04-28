@@ -6,6 +6,7 @@ import importlib
 import argparse
 import inspect
 import logging
+import time
 import os
 import re
 
@@ -21,6 +22,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.progress import TaskID, Task
+from colorama import Fore
 import torch.multiprocessing as mp
 
 
@@ -99,9 +101,10 @@ def check_aged(path: Path, offset: str) -> bool:
     return True
 
 
-def get_candidates(root: Path, options: dict):
+def get_candidates(root: Path, options: dict) -> list[Path]:
+    files: list[Path] = []
     if root.is_file():
-        yield root.absolute()
+        files.append(root.absolute())
 
     for file in root.rglob("*.mkv"):
         if file.is_file():
@@ -109,17 +112,19 @@ def get_candidates(root: Path, options: dict):
                 if not check_if_adjacent_exists(path=file) and check_aged(
                     path=file, offset=options["convert_aged"]
                 ):
-                    yield file.absolute()
+                    files.append(file.absolute())
 
             elif options["skip_if_existing"]:
                 if not check_if_adjacent_exists(path=file):
-                    yield file.absolute()
+                    files.append(file.absolute())
 
             elif options["convert_aged"]:
                 if check_aged(path=file, offset=options["convert_aged"]):
-                    yield file.absolute()
+                    files.append(file.absolute())
             else:
-                yield file.absolute()
+                files.append(file.absolute())
+    
+    return files
 
 
 def get_classes(module) -> list[str]:
@@ -143,8 +148,19 @@ def progress_bar(task_queue: Queue, progress_queue: Queue, event: Event):
         TimeRemainingColumn(),
         TimeElapsedColumn(),
     )
+    t_start = time.time()
+    t_end = time.time()
+
     with progress:
         while not end:
+            match t_end - t_start:
+                case 20:
+                    logger.info(Fore.YELLOW + "Still here just waiting on files, will warn again if it should take longer" + Fore.RESET)
+                    t_end = time.time()
+                case 360:
+                    logger.info(Fore.RED + "Took 5 minutes and still no new file, something is up" + Fore.RESET)
+                    t_end = time.time()
+
             try:
                 description, total = task_queue.get_nowait()
                 task_id = progress.add_task(
@@ -169,12 +185,13 @@ def progress_bar(task_queue: Queue, progress_queue: Queue, event: Event):
                         progress.update(
                             task_id=task.id, refresh=True, visible=False
                         )
+
+                    t_start = time.time()
             except Exception:
                 pass
             
             if event.is_set():
-                if progress.finished and tasks:
-                    end = True
+                end = True
 
 
 def import_class(class_name: str, module_name: str):
@@ -272,7 +289,7 @@ def sub_convert():
         "-d",
         "--dump-debug",
         action="store_true",
-        help="Dumps debug info like a view of the timelines and PGS Displaysets under /debug/hash",
+        help="Dumps debug info like a view of the timelines and PGS DisplaySets under /debug/hash",
     )
     args = parser.parse_args()
 
@@ -292,6 +309,11 @@ def sub_convert():
 
     # Get mkv files to extract subtitles from
     convertibles = get_candidates(root=root, options=options)
+    if not convertibles:
+        logger.info(Fore.YELLOW + "No files to convert found, if you expected files to be converted, check if that path is accessible." + Fore.RESET)
+        exit()
+
+    logger.info(Fore.CYAN + "Files to convert found, setting up ModelCore, this can take a while." + Fore.RESET)
     pgs_managers = chain.from_iterable(
         (
             SubtitleTrackManager(file_path=path).get_pgs_managers(options=options)
@@ -350,6 +372,8 @@ def sub_convert():
     gpu_ocr_processes: list[Process] = []
     gpu_core_class = import_class(args.ocr_model_core, ocr_model_core.__name__)
     gpu_core = gpu_core_class(options=options)
+
+    logger.info(Fore.CYAN + f"Setting up OCRModelCore: {gpu_core.__class__.__name__}" + Fore.RESET)
     for idx in range(0, gpu_ocr_workers):
         cess = Process(
                 target=OCRGPUWorker(gpu_core, queues).run, # type: ignore
@@ -370,6 +394,8 @@ def sub_convert():
         args.language_model_core, language_model_core.__name__
     )
     lang_core = language_core_class(options=options)
+
+    logger.info(Fore.CYAN + f"Setting up LanguageModelCore: {lang_core.__class__.__name__}" + Fore.RESET)
     for idx in range(0, gpu_lang_workers):
         cess = Process(
                 target=LanguageGPUWorker(lang_core, queues).run, # type: ignore
@@ -390,13 +416,17 @@ def sub_convert():
     try:
         for process in processes:
             process.start()
-        thread.start()
 
         runnable = CPUWorker(queues=queues) # type: ignore
         del queues
+
+        thread.start()
+        logger.info(Fore.MAGENTA + "Start converting ..." + Fore.RESET)
         with Pool(processes=cpu_workers) as pool:
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
                 pass
+
+        logger.info(Fore.CYAN + "Finished, winding down processes ..." + Fore.RESET)
     except KeyboardInterrupt:
         pass
 
@@ -408,3 +438,5 @@ def sub_convert():
             process.terminate()
             process.join()
             process.close()
+    
+    logger.info(Fore.GREEN + "Finished" + Fore.RESET)

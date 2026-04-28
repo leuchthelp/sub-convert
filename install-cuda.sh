@@ -7,7 +7,7 @@ uv pip install --pre torch torchvision --index-url https://download.pytorch.org/
 uv pip install https://github.com/Dao-AILab/flash-attention.git --no-build-isolation
 
 # Setup general packages
-uv pip install pysrt pymkv2 pillow pytesseract rich langcodes lingua-language-detector
+uv pip install pysrt pymkv2 pillow pytesseract rich langcodes lingua-language-detector colorama
 uv pip install transformers accelerate
 
 # Setup devel packages
