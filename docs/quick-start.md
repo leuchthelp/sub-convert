@@ -19,13 +19,16 @@ wget -qO- https://astral.sh/uv/install.sh | sh
 In the future the project will be entirely switched over to uv, however due to various dependency conflicts with pytorch, rocm, flash_attn and alike, simple install script are the way to go. Until I can figure out a proper, native uv project, there will be no build for this project.
 
 **NOTICE**
+
 Supported: Linux, Windows has not been tested.
 
 Make sure to install any framework required by your GPU beforehand. 
 
-For rocm follow [these instruction](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html) and install rocm,
+For rocm follow [these instructions](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html) and install rocm,
 
-for cuda follow these [these instruction](https://developer.nvidia.com/cuda-downloads?target_os=Linux) and install cuda.
+for cuda follow [these instructions](https://developer.nvidia.com/cuda-downloads?target_os=Linux) and install cuda,
+
+for openvino follow [these instructions](https://docs.openvino.ai/2025/get-started/install-openvino/configurations/configurations-intel-gpu.html) and install openvino.
 
 There are five install script denoted with their respective platform:
 
