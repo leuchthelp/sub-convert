@@ -280,7 +280,7 @@ class PgsManager:
 
     def __get_lang_weights(
         self, subtitle_groups: list[SubtitleGroup]
-    ) -> dict[str, list]:
+    ) -> dict[str, list[float]]:
         combined: list[list[tuple[str, typing.Any]]] = []
         for group in subtitle_groups:
             for timeline in group.timelines:
@@ -288,7 +288,7 @@ class PgsManager:
                     combined.append(item.lang_estimate)
 
         counter = Counter()
-        average: dict[str, list] = {}
+        average: dict[str, list[float]] = {}
         weights = {}
 
         for both in combined:
@@ -329,10 +329,6 @@ class PgsManager:
         srt = SubRipFile(items=items)
         track = self.mkv_track
         path = Path(track.file_path).name.replace(".mkv", "")
-        average = self.__get_lang_weights(subtitle_groups=subtitle_groups)
-
-        final_lang = track.language_ietf if track.language_ietf is not None else ""
-        final_lang = max(average, key=average.get)  # type: ignore
 
         path = path + ".sdh" if track.flag_hearing_impaired else ""
 
@@ -342,11 +338,17 @@ class PgsManager:
             forced = True
         path = path + ".forced" if forced else ""
 
-        if track.language_ietf == final_lang:
-            if track.language is not None:
-                path = path + "." + track.language
-        else:
-            path = path + "." + Language.get(final_lang).to_alpha3(variant="B")
+
+        average = self.__get_lang_weights(subtitle_groups=subtitle_groups)
+        final_lang = max(average, key=average.get)  # type: ignore
+
+        if type(final_lang) is not str:
+            if track.effective_language is not None:
+                final_lang = track.effective_language
+            else:
+                raise ValueError(f"For some reason we were unable to determine any kind of language for {self.mkv_track.file_path}")
+
+        path = path + "." + Language.get(final_lang).to_alpha3(variant="B")
 
         potential_path = f"{str(Path(track.file_path)).replace('.mkv', '')}{path}.srt"
         if self.overwrite_if_exists and Path(potential_path).exists():
