@@ -101,7 +101,7 @@ class PaddleModelCore(OCRModelCore):
         messages = []
         for image in batch:
             tmp_template = deepcopy(message_template)
-            tmp_template[0]["content"][0]["image"] = image
+            tmp_template[0]["content"][0]["image"] = image # type: ignore
             messages.append(tmp_template)
 
         inputs = self.processor.apply_chat_template(
