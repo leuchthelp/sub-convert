@@ -79,6 +79,8 @@ class PaddleModelCore(OCRModelCore):
             model_name, backend="torchvision"
         )
 
+        self.processor.tokenizer.padding_side = "left"
+        
     def analyse(self, batch: list) -> list[str]:
 
         # Setup ocr prompt and message template
@@ -108,6 +110,7 @@ class PaddleModelCore(OCRModelCore):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            processor_kwargs={"padding": True},
         ).to(self.torch_device)
 
         with torch.inference_mode():
