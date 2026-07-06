@@ -154,15 +154,13 @@ class PaddlePaddleModelCore(OCRModelCore):
 
     def __init_around_pickle(self):
         model = PaddleOCR(
-            # text_detection_model_name=f"{self.model_name}_det",
+            text_detection_model_name=f"{self.model_name}_det",
             text_recognition_model_name=f"{self.model_name}_rec",
             engine="transformers",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=True,
         )
-
-        logger.critical(model)
         return model
 
     def analyse(self, batch: list[Image.Image]) -> list[str]:
