@@ -141,15 +141,17 @@ import numpy as np  # noqa: E402
 
 @dataclass
 class PaddlePaddleModelCore(OCRModelCore):
-    __slots__ = ("model", "processor", "torch_device")
+    __slots__ = ("model", "model_name", "language")
 
     def __init__(
         self,
         options: dict,
         model_name="PP-OCRv6_medium",
+        language: str | None = None,
     ):
         super().__init__(options=options)
         self.model_name = model_name
+        self.language = language
         self.model = None
 
     def __init_around_pickle(self):
@@ -160,6 +162,7 @@ class PaddlePaddleModelCore(OCRModelCore):
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=True,
+            lang=self.language,
         )
         return model
 
