@@ -4,6 +4,8 @@ from copy import deepcopy
 import logging
 import os
 
+from PIL import Image
+
 # os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
@@ -16,7 +18,7 @@ class OCRModelCore:
     def __init__(self, options: dict):
         self.options = options
 
-    def analyse(self, batch: list) -> list[str]:
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
         import pytesseract as tess
 
         texts: list[str] = []
@@ -80,8 +82,8 @@ class PaddleModelCore(OCRModelCore):
         )
 
         self.processor.tokenizer.padding_side = "left"
-        
-    def analyse(self, batch: list) -> list[str]:
+
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
 
         # Setup ocr prompt and message template
         ocr_task = "ocr"
@@ -101,7 +103,7 @@ class PaddleModelCore(OCRModelCore):
         messages = []
         for image in batch:
             tmp_template = deepcopy(message_template)
-            tmp_template[0]["content"][0]["image"] = image # type: ignore
+            tmp_template[0]["content"][0]["image"] = image
             messages.append(tmp_template)
 
         inputs = self.processor.apply_chat_template(
@@ -131,3 +133,55 @@ class PaddleModelCore(OCRModelCore):
     def __del__(self):
         del self.model
         del self.processor
+
+
+from paddleocr import PaddleOCR  # noqa: E402
+import numpy as np  # noqa: E402
+
+
+@dataclass
+class PaddlePaddleModelCore(OCRModelCore):
+    __slots__ = ("model", "processor", "torch_device")
+
+    def __init__(
+        self,
+        options: dict,
+        model_name="PP-OCRv6_medium",
+    ):
+        super().__init__(options=options)
+        self.model_name = model_name
+        self.model = None
+
+    def __init_around_pickle(self):
+        model = PaddleOCR(
+            # text_detection_model_name=f"{self.model_name}_det",
+            text_recognition_model_name=f"{self.model_name}_rec",
+            engine="transformers",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=True,
+        )
+
+        logger.critical(model)
+        return model
+
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
+
+        if not self.model:
+            self.model = self.__init_around_pickle()
+
+        conv_batch: list[np.ndarray] = []
+        for image in batch:
+            conv_batch.append(np.asarray(image))
+        out = self.model.predict_iter(input=conv_batch)
+
+        tmp: list[str] = []
+        for res in out:
+            texts: list[str] = res["rec_texts"]
+            concat = "\n".join(texts)
+            tmp.append(concat)
+
+        return tmp
+
+    def __del__(self):
+        del self.model

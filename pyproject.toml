@@ -27,12 +27,14 @@ cpu = [
     "torch>=2.12.1",
     "torchvision",
     "transformers>=5.12.1",
+    "paddleocr[all]",
 ]
 cuda = [
     "accelerate>=1.14.0",
     "torch>=2.12.1",
     "torchvision",
     "transformers>=5.12.1",
+    "paddleocr[all]",
 ]
 openvino = [
     "accelerate>=1.14.0",

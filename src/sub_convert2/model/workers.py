@@ -5,6 +5,7 @@ import typing
 
 from torch.multiprocessing import current_process, Queue
 from queue import Empty
+from PIL import Image
 
 from sub_convert2.pgs.pgs_manager import PgsManager, PgsSubtitleItem
 from sub_convert2.model.language_model_core import LanguageModelCore
@@ -30,7 +31,7 @@ class OCRGPUWorker:
         del queues
 
     def run(self, event, batch_size=16):
-        batch = []
+        batch: list[Image.Image] = []
         og_batch_size = batch_size
         memory: dict[int, tuple[str, int]] = {}
 
