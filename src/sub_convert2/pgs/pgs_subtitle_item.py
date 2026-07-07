@@ -44,11 +44,11 @@ class PgsSubtitleItem:
         return PgsImage(data=tmp, palettes=palettes)
 
     @property
-    def height(self):
+    def height(self) -> int:
         return self.image.shape[0]
 
     @property
-    def width(self):
+    def width(self) -> int:
         return self.image.shape[1]
 
     @property
@@ -57,7 +57,7 @@ class PgsSubtitleItem:
         return shape[0] + (shape[2] - shape[0]) // 2
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, ...]:
         height, width = self.height, self.width
         y_offset, x_offset = self.y_offset, self.x_offset
 

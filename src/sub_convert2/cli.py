@@ -12,6 +12,11 @@ import re
 
 
 from torch.multiprocessing import Process, Queue, Manager, Pool, set_start_method
+from rich.traceback import install as install_rich_traceback
+from rich_argparse import RichHelpFormatter
+from rich.progress import TaskID, Task
+from rich.logging import RichHandler
+from rich.console import Console
 from rich.progress import (
     Progress,
     TextColumn,
@@ -21,8 +26,6 @@ from rich.progress import (
     MofNCompleteColumn,
     TimeElapsedColumn,
 )
-from rich.progress import TaskID, Task
-from colorama import Fore
 from queue import Empty
 import torch.multiprocessing as mp
 
@@ -33,10 +36,12 @@ from sub_convert2.model import ocr_model_core, language_model_core
 
 
 logging.basicConfig(
-    level=logging.CRITICAL,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.CRITICAL, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
 )
 logger = logging.getLogger(__name__)
+
+error_console = Console(stderr=True)
+install_rich_traceback(console=error_console)
 logger.setLevel(logging.INFO)
 
 
@@ -156,17 +161,13 @@ def progress_bar(task_queue: Queue, progress_queue: Queue, event: Event):
         while not end:
             match t_end - t_start:
                 case 20:
-                    logger.info(
-                        Fore.YELLOW
-                        + "Still here just waiting on files, will warn again if it should take longer"
-                        + Fore.RESET
+                    logger.warning(
+                        "Still here just waiting on files, will warn again if it should take longer"
                     )
                     t_end = time.time()
                 case 360:
-                    logger.info(
-                        Fore.RED
-                        + "Took 5 minutes and still no new file, something is up"
-                        + Fore.RESET
+                    logger.critical(
+                        "Took 5 minutes and still no new file, something is up"
                     )
                     t_end = time.time()
 
@@ -212,6 +213,7 @@ def sub_convert():
     parser = argparse.ArgumentParser(
         prog="PGS subtitle conversion using OCR and language identification on MKV files.",
         description="run python based PGS subtitle recognition",
+        formatter_class=RichHelpFormatter,
     )
     parser.add_argument(
         "-om",
@@ -323,18 +325,12 @@ def sub_convert():
     # Get mkv files to extract subtitles from
     convertibles = get_candidates(root=root, options=options)
     if not convertibles:
-        logger.info(
-            Fore.YELLOW
-            + "No files to convert found, if you expected files to be converted, check if that path is accessible."
-            + Fore.RESET
+        logger.warning(
+            "No files to convert found, if you expected files to be converted, check if that path is accessible."
         )
         exit()
 
-    logger.info(
-        Fore.CYAN
-        + "Files to convert found, setting up ModelCore, this can take a while."
-        + Fore.RESET
-    )
+    logger.info("Files to convert found, setting up ModelCore, this can take a while.")
     pgs_managers = chain.from_iterable(
         (
             SubtitleTrackManager(file_path=path).get_pgs_managers(options=options)
@@ -359,9 +355,9 @@ def sub_convert():
         "progress_queue": progress_manager.Queue(),
     }
 
-    cpu_workers = args.cpu_workers
-    gpu_ocr_workers = args.ocr_workers
-    gpu_lang_workers = args.lang_workers
+    cpu_workers: int = args.cpu_workers
+    gpu_ocr_workers: int = args.ocr_workers
+    gpu_lang_workers: int = args.lang_workers
 
     # Have to be a little careful with index counting as process numbering
     # cannot be set beforehand. As such need to ensure mapping of queue ids
@@ -374,16 +370,12 @@ def sub_convert():
 
     gpu_event = mp.Event()
 
-    gpu_ocr_batchsize = args.batchsize
+    gpu_ocr_batchsize: int = args.batchsize
     gpu_ocr_processes: list[Process] = []
     gpu_core_class = import_class(args.ocr_model_core, ocr_model_core.__name__)
     gpu_core = gpu_core_class(options=options)
 
-    logger.info(
-        Fore.CYAN
-        + f"Setting up OCRModelCore: {gpu_core.__class__.__name__}"
-        + Fore.RESET
-    )
+    logger.info(f"Setting up OCRModelCore: {gpu_core.__class__.__name__}")
     for idx in range(0, gpu_ocr_workers):
         cess = Process(
             target=OCRGPUWorker(gpu_core, queues).run,  # type: ignore
@@ -397,18 +389,14 @@ def sub_convert():
         gpu_ocr_processes.append(cess)
     del gpu_core
 
-    gpu_lang_batchsize = args.batchsize
+    gpu_lang_batchsize: int = args.batchsize
     gpu_lang_processes: list[Process] = []
     language_core_class = import_class(
         args.language_model_core, language_model_core.__name__
     )
     lang_core = language_core_class(options=options)
 
-    logger.info(
-        Fore.CYAN
-        + f"Setting up LanguageModelCore: {lang_core.__class__.__name__}"
-        + Fore.RESET
-    )
+    logger.info(f"Setting up LanguageModelCore: {lang_core.__class__.__name__}")
     for idx in range(0, gpu_lang_workers):
         cess = Process(
             target=LanguageGPUWorker(lang_core, queues).run,  # type: ignore
@@ -444,12 +432,12 @@ def sub_convert():
         del queues
 
         thread.start()
-        logger.info(Fore.MAGENTA + "Start converting ..." + Fore.RESET)
+        logger.info("Start converting ...")
         with Pool(processes=cpu_workers) as pool:
             for _ in pool.imap_unordered(runnable.run, pgs_managers):
                 pass
 
-        logger.info(Fore.CYAN + "Finished, winding down processes ..." + Fore.RESET)
+        logger.info("Finished, winding down processes ...")
     except KeyboardInterrupt:
         pass
 
@@ -462,4 +450,4 @@ def sub_convert():
             process.join()
             process.close()
 
-    logger.info(Fore.GREEN + "Finished" + Fore.RESET)
+    logger.info("Finished")

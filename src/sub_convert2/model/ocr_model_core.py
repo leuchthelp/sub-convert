@@ -1,6 +1,5 @@
 from importlib.util import find_spec
 from dataclasses import dataclass
-from copy import deepcopy
 import logging
 import os
 
@@ -90,21 +89,19 @@ class PaddleModelCore(OCRModelCore):
         prompts = {
             "ocr": "OCR:",
         }
-        message_template = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": None},
-                    {"type": "text", "text": prompts[ocr_task]},
-                ],
-            }
-        ]
 
         messages = []
         for image in batch:
-            tmp_template = deepcopy(message_template)
-            tmp_template[0]["content"][0]["image"] = image
-            messages.append(tmp_template)
+            message_template = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": prompts[ocr_task]},
+                    ],
+                }
+            ]
+            messages.append(message_template)
 
         inputs = self.processor.apply_chat_template(
             messages,
@@ -135,13 +132,11 @@ class PaddleModelCore(OCRModelCore):
         del self.processor
 
 
-from paddleocr import PaddleOCR  # noqa: E402
-import numpy as np  # noqa: E402
-
-
 @dataclass
 class PaddlePaddleModelCore(OCRModelCore):
     __slots__ = ("model", "model_name", "language")
+
+    import numpy as np
 
     def __init__(
         self,
@@ -155,6 +150,8 @@ class PaddlePaddleModelCore(OCRModelCore):
         self.model = None
 
     def __init_around_pickle(self):
+        from paddleocr import PaddleOCR
+
         model = PaddleOCR(
             text_detection_model_name=f"{self.model_name}_det",
             text_recognition_model_name=f"{self.model_name}_rec",
@@ -171,9 +168,9 @@ class PaddlePaddleModelCore(OCRModelCore):
         if not self.model:
             self.model = self.__init_around_pickle()
 
-        conv_batch: list[np.ndarray] = []
+        conv_batch: list[self.np.ndarray] = []
         for image in batch:
-            conv_batch.append(np.asarray(image))
+            conv_batch.append(self.np.asarray(image))
         out = self.model.predict_iter(input=conv_batch)
 
         tmp: list[str] = []

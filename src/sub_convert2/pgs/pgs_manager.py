@@ -14,7 +14,6 @@ from pysrt import SubRipFile, SubRipItem, SubRipTime
 from PIL import Image, ImageOps
 from langcodes import Language
 from pymkv import MKVTrack
-from colorama import Fore
 import numpy as np
 
 from sub_convert2.subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
@@ -56,7 +55,9 @@ class PgsManager:
             if "overwrite_if_exists" in options
             else False
         )
-        self.dump_debug = options["dump_debug"] if "dump_debug" in options else False
+        self.dump_debug: bool = (
+            options["dump_debug"] if "dump_debug" in options else False
+        )
 
         if self.tmp_path.exists():
             shutil.rmtree(self.tmp_path)
@@ -93,7 +94,7 @@ class PgsManager:
             self.pgs = Pgs(tmp_location=tmp_file, temp_folder=str(path))
 
             pgs_items = self.pgs.items
-            for index, item in enumerate(pgs_items):
+            for _, item in enumerate(pgs_items):
                 # Expand border to ensure proper recognition if text is very close to image borders.
                 # Also invert as black-outline texts is saved inverted (as white-outline).
                 # This could help detection.
@@ -112,7 +113,7 @@ class PgsManager:
             if self.dump_debug:
                 image_path = Path(f"{path}/images")
                 image_path.mkdir(parents=True, exist_ok=True)
-                for index, (image, item) in enumerate(final):
+                for index, (image, _) in enumerate(final):
                     image.save(f"{image_path}/{index}.png")
 
         except CalledProcessError as e:
@@ -121,7 +122,7 @@ class PgsManager:
                 + f"from: {Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}. "
                 + f"Please check the file for a corrupted track. Will skip for now. More details: \n {e.output.decode(sys.getfilesystemencoding())}"
             )
-            logger.critical(Fore.RED + log_msg + Fore.RESET)
+            logger.critical(log_msg)
         finally:
             shutil.rmtree(path=self.tmp_path)
         return final
@@ -187,7 +188,9 @@ class PgsManager:
         df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
         fig.write_image(f"{path.absolute()}/quickview-{self.hash[0:6]}.svg")
 
-    def __timeline_events(self, timeline: dict[str, list[TimelineItem]]):
+    def __timeline_events(
+        self, timeline: dict[str, list[TimelineItem]]
+    ) -> list[SubRipTime]:
         tmp = list(
             chain.from_iterable([
                 (item.start, item.end)
@@ -203,7 +206,9 @@ class PgsManager:
 
         return timeline_events
 
-    def __sweeping_line(self, timeline: dict[str, list[TimelineItem]]):
+    def __sweeping_line(
+        self, timeline: dict[str, list[TimelineItem]]
+    ) -> list[TimelineItem]:
         timeline_events = self.__timeline_events(timeline=timeline)
 
         intermediate: list[TimelineItem] = []
@@ -285,30 +290,38 @@ class PgsManager:
 
     def __get_lang_weights(
         self, subtitle_groups: list[SubtitleGroup]
-    ) -> dict[str, list[float]]:
+    ) -> dict[str, float]:
         combined: list[list[tuple[str, typing.Any]]] = []
         for group in subtitle_groups:
             for timeline in group.timelines:
                 for item in list(chain.from_iterable(timeline.values())):
                     combined.append(item.lang_estimate)
 
-        counter = Counter()
-        average: dict[str, list[float]] = {}
-        weights = {}
+        counter: Counter[str] = Counter()
+        weights: dict[str, float] = {}
+        individual: dict[str, list[float]] = {}
+        average: dict[str, float] = {}
 
         for both in combined:
             for label, prob in both:
                 counter.update([label])
-                if label not in average:
-                    average[label] = [prob]
+                if label not in individual:
+                    individual[label] = [prob]
                 else:
-                    average[label].append(prob)
+                    individual[label].append(prob)
 
         for label, count in counter.items():
             weights[label] = count / counter.total()
-        for label, prob in average.items():
-            average[label] = np.average(prob) * weights[label]
+            logger.debug(
+                f"label: {label}, count: {count}, total: {counter.total()}, weight: {weights[label]}"
+            )
+        for label, prob in individual.items():
+            average[label] = float(np.average(prob) * weights[label])
+            logger.debug(
+                f"label: {label}, prob: {prob}, weights: {weights}, average: {average[label]}"
+            )
 
+        logger.debug(f"overall_average: {average}")
         return average
 
     def save_file(self, export_as: str = "srt"):
@@ -317,7 +330,6 @@ class PgsManager:
         if self.dump_debug:
             self.__debug_vis_timelines(subtitle_groups=subtitle_groups)
 
-        items: list[SubRipItem] = []
         match export_as:
             case "srt":
                 items = self.__gen_srt_items(subtitle_groups=subtitle_groups)
@@ -344,15 +356,7 @@ class PgsManager:
         path = path + ".forced" if forced else ""
 
         average = self.__get_lang_weights(subtitle_groups=subtitle_groups)
-        final_lang = max(average, key=average.get)  # type: ignore
-
-        if type(final_lang) is not str:
-            if track.effective_language is not None:
-                final_lang = track.effective_language
-            else:
-                raise ValueError(
-                    f"For some reason we were unable to determine any kind of language for {self.mkv_track.file_path}"
-                )
+        final_lang = max(average, key=lambda k: average[k])
 
         path = path + "." + Language.get(final_lang).to_alpha3(variant="B")
 

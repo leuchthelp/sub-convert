@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 import logging
-import typing
 
 from torch.multiprocessing import current_process, Queue
+from multiprocessing.synchronize import Event
 from queue import Empty
 from PIL import Image
 
@@ -30,7 +30,7 @@ class OCRGPUWorker:
         self.core = core
         del queues
 
-    def run(self, event, batch_size=16):
+    def run(self, event: Event, batch_size: int = 16):
         batch: list[Image.Image] = []
         og_batch_size = batch_size
         memory: dict[int, tuple[str, int]] = {}
@@ -79,7 +79,7 @@ class LanguageGPUWorker:
         self.queues = queues
         self.core = core
 
-    def run(self, event, batch_size=16):
+    def run(self, event: Event, batch_size: int = 16):
         end = False
         while not end:
             original_text, return_queue, idx = self.pass_queue.get()
@@ -140,9 +140,8 @@ class CPUWorker:
             self.gpu_ocr_queue.put((image, queue_index, index))
             finished[index] = item
 
-        safety_check = []
-        for index in finished:
-            combined: list[tuple[str, typing.Any]] = []
+        safety_check: list[int] = []
+        for _ in finished:
             text, combined, index = return_queue.get()
 
             self.progress_queue.put(

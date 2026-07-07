@@ -2193,7 +2193,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "python-dateutil" },
-    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-12-sub-convert2-cpu' and extra == 'extra-12-sub-convert2-cuda') or (extra == 'extra-12-sub-convert2-cpu' and extra == 'extra-12-sub-convert2-openvino') or (extra == 'extra-12-sub-convert2-cpu' and extra == 'extra-12-sub-convert2-rocm') or (extra == 'extra-12-sub-convert2-cuda' and extra == 'extra-12-sub-convert2-openvino') or (extra == 'extra-12-sub-convert2-cuda' and extra == 'extra-12-sub-convert2-rocm') or (extra == 'extra-12-sub-convert2-openvino' and extra == 'extra-12-sub-convert2-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/87/4341c6252d1c47b08768c3d25ac487362bf403f0313ddae4a2a26c9b1b4c/pandas-3.0.3.tar.gz", hash = "sha256:696a4a00a2a2a35d4e5deb3fc946641b96c944f02230e4f76137fe35d806c4fc", size = 4651414, upload-time = "2026-05-11T18:54:29.21Z" }
 wheels = [
@@ -2926,6 +2926,18 @@ wheels = [
 ]
 
 [[package]]
+name = "rich-argparse"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/e5/1064c43203a357d668cd42435f7a15fe6af51512d85b2104fecb937aa861/rich_argparse-1.8.0.tar.gz", hash = "sha256:679df3d832fa94ad6e4bdb07ded088cd7ea2dddc58ae9b2b46346a40b06cbc0c", size = 38940, upload-time = "2026-05-01T15:18:43.604Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/35/1cceccc5fcb50fa2ed53e2aa278cd032f3902682a73e763fb1ac3be8e6fa/rich_argparse-1.8.0-py3-none-any.whl", hash = "sha256:d2a3ce7854654e2253c578763ab0a32f05016f23a55fadba7b9a91b6c0e92142", size = 25616, upload-time = "2026-05-01T15:18:42.395Z" },
+]
+
+[[package]]
 name = "rpds-py"
 version = "2026.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3266,7 +3278,6 @@ name = "sub-convert2"
 version = "0.1.0rc1"
 source = { editable = "." }
 dependencies = [
-    { name = "colorama" },
     { name = "langcodes" },
     { name = "lingua-language-detector" },
     { name = "pillow" },
@@ -3275,6 +3286,7 @@ dependencies = [
     { name = "pysrt" },
     { name = "pytesseract" },
     { name = "rich" },
+    { name = "rich-argparse" },
 ]
 
 [package.optional-dependencies]
@@ -3314,6 +3326,7 @@ dev = [
     { name = "kaleido" },
     { name = "mkdocstrings-python" },
     { name = "nbstripout" },
+    { name = "pandas" },
     { name = "plotly" },
     { name = "py7zr" },
     { name = "pytest" },
@@ -3327,7 +3340,6 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'cuda'", specifier = ">=1.14.0" },
     { name = "accelerate", marker = "extra == 'openvino'", specifier = ">=1.14.0" },
     { name = "accelerate", marker = "extra == 'rocm'", specifier = ">=1.14.0" },
-    { name = "colorama", specifier = ">=0.4.6" },
     { name = "langcodes", specifier = ">=3.5.1" },
     { name = "lingua-language-detector", specifier = ">=2.2.0" },
     { name = "paddleocr", extras = ["all"], marker = "extra == 'cpu'" },
@@ -3338,6 +3350,7 @@ requires-dist = [
     { name = "pysrt", specifier = ">=1.1.2" },
     { name = "pytesseract", specifier = ">=0.3.13" },
     { name = "rich", specifier = ">=15.0.0" },
+    { name = "rich-argparse", specifier = ">=1.8.0" },
     { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.12.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "sub-convert2", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cuda'", specifier = ">=2.12.1", index = "https://download.pytorch.org/whl/cu132", conflict = { package = "sub-convert2", extra = "cuda" } },
     { name = "torch", marker = "extra == 'openvino'", specifier = ">=2.12.1", index = "https://download.pytorch.org/whl/xpu", conflict = { package = "sub-convert2", extra = "openvino" } },
@@ -3360,6 +3373,7 @@ dev = [
     { name = "kaleido", specifier = ">=1.3.0" },
     { name = "mkdocstrings-python", specifier = ">=2.0.5" },
     { name = "nbstripout", specifier = ">=0.9.1" },
+    { name = "pandas", specifier = ">=3.0.3" },
     { name = "plotly", specifier = ">=6.8.0" },
     { name = "py7zr", specifier = ">=1.1.3" },
     { name = "pytest", specifier = ">=9.1.1" },

@@ -152,7 +152,7 @@ class TimelineItem:
         SubRipTime
             Duration with which a given TimelineItem is being displayed.
         """
-        if self.end is None:
+        if self.end < self.start:
             raise ValueError("End has not been set yet.")
         return self.end - self.start
 
