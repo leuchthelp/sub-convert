@@ -10,7 +10,7 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-static_languages = [
+STATIC_LANGUAGES = [
     "ar",
     "eu",
     "br",
@@ -63,6 +63,8 @@ static_languages = [
 class LanguageModelCore:
     __slots__ = ("detector", "options")
 
+    from lingua import Language, LanguageDetectorBuilder, LanguageDetector
+
     def __init__(
         self,
         options: dict,
@@ -70,17 +72,15 @@ class LanguageModelCore:
         self.options = options
         self.detector = None
 
-    def __init_around_pickle(self):
-        from lingua import Language, LanguageDetectorBuilder
-
+    def __init_around_pickle(self) -> LanguageDetector:
         languages = [
-            Language.ENGLISH,
-            Language.FRENCH,
-            Language.GERMAN,
-            Language.SPANISH,
-            Language.JAPANESE,
+            self.Language.ENGLISH,
+            self.Language.FRENCH,
+            self.Language.GERMAN,
+            self.Language.SPANISH,
+            self.Language.JAPANESE,
         ]
-        return LanguageDetectorBuilder.from_languages(*languages).build()
+        return self.LanguageDetectorBuilder.from_languages(*languages).build()
 
     def get_topk(self, text: str, k=3) -> list[tuple[str, typing.Any]]:
         if self.detector is None:
@@ -143,7 +143,7 @@ class LangDetectModelCore(LanguageModelCore):
         )
 
         if languages is None:
-            languages = static_languages
+            languages = STATIC_LANGUAGES
         self.languages = languages
 
     def __predict(self, text: str) -> torch.Tensor:
@@ -153,7 +153,7 @@ class LangDetectModelCore(LanguageModelCore):
             truncation=True,
             max_length=128,
             return_tensors="pt",
-        ).to(self.torch_device)
+        ).to(self.torch_device)  # ty:ignore[call-non-callable]
 
         with torch.no_grad():
             outputs = self.model(

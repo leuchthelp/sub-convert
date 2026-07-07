@@ -1,8 +1,9 @@
 from importlib.util import find_spec
 from dataclasses import dataclass
-from copy import deepcopy
 import logging
 import os
+
+from PIL import Image
 
 # os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -16,7 +17,7 @@ class OCRModelCore:
     def __init__(self, options: dict):
         self.options = options
 
-    def analyse(self, batch: list) -> list[str]:
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
         import pytesseract as tess
 
         texts: list[str] = []
@@ -80,29 +81,27 @@ class PaddleModelCore(OCRModelCore):
         )
 
         self.processor.tokenizer.padding_side = "left"
-        
-    def analyse(self, batch: list) -> list[str]:
+
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
 
         # Setup ocr prompt and message template
         ocr_task = "ocr"
         prompts = {
             "ocr": "OCR:",
         }
-        message_template = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": None},
-                    {"type": "text", "text": prompts[ocr_task]},
-                ],
-            }
-        ]
 
         messages = []
         for image in batch:
-            tmp_template = deepcopy(message_template)
-            tmp_template[0]["content"][0]["image"] = image # type: ignore
-            messages.append(tmp_template)
+            message_template = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": prompts[ocr_task]},
+                    ],
+                }
+            ]
+            messages.append(message_template)
 
         inputs = self.processor.apply_chat_template(
             messages,
@@ -131,3 +130,56 @@ class PaddleModelCore(OCRModelCore):
     def __del__(self):
         del self.model
         del self.processor
+
+
+@dataclass
+class PaddlePaddleModelCore(OCRModelCore):
+    __slots__ = ("model", "model_name", "language")
+
+    import numpy as np
+
+    def __init__(
+        self,
+        options: dict,
+        model_name="PP-OCRv6_medium",
+        language: str | None = None,
+    ):
+        super().__init__(options=options)
+        self.model_name = model_name
+        self.language = language
+        self.model = None
+
+    def __init_around_pickle(self):
+        from paddleocr import PaddleOCR
+
+        model = PaddleOCR(
+            text_detection_model_name=f"{self.model_name}_det",
+            text_recognition_model_name=f"{self.model_name}_rec",
+            engine="transformers",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=True,
+            lang=self.language,
+        )
+        return model
+
+    def analyse(self, batch: list[Image.Image]) -> list[str]:
+
+        if not self.model:
+            self.model = self.__init_around_pickle()
+
+        conv_batch: list[self.np.ndarray] = []
+        for image in batch:
+            conv_batch.append(self.np.asarray(image))
+        out = self.model.predict_iter(input=conv_batch)
+
+        tmp: list[str] = []
+        for res in out:
+            texts: list[str] = res["rec_texts"]
+            concat = "\n".join(texts)
+            tmp.append(concat)
+
+        return tmp
+
+    def __del__(self):
+        del self.model
