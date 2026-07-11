@@ -5,6 +5,8 @@ import typing
 import json
 import os
 
+from pysrt.srttime import SubRipTime
+
 from sub_convert2.pgs.pgs_segments import PgsReader, DisplaySet
 from sub_convert2.pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
 from sub_convert2.subtitle.timeline import (
@@ -40,7 +42,7 @@ class FadeHandler:
 
         self.timelines = timelines
 
-    def __find_roi(self, members: list[DisplaySet]):
+    def __find_roi(self, members: list[DisplaySet]) -> list[list[DisplaySet]]:
         rois: list[list[DisplaySet]] = []
         check, start, end = members[1:-1], members[0], members[-1]
         # A region of interest (roi) in the context of a fade (in / out)
@@ -63,8 +65,8 @@ class FadeHandler:
             curr = ds.ods_segments[-1]
             lead = tmp[0].ods_segments[-1]
 
-            height_delta = abs(curr.height - lead.height)
-            width_delta = abs(curr.width - lead.width)
+            height_delta: int = abs(curr.height - lead.height)
+            width_delta: int = abs(curr.width - lead.width)
 
             if (
                 (curr.version == 0 or lead.version != curr.version)
@@ -82,8 +84,9 @@ class FadeHandler:
         rois[-1].append(end)
         return rois
 
-    def __find_fade(self, members: list[DisplaySet]):
-        fade_groups: list[list[DisplaySet]] = []
+    def __find_fade(
+        self, members: list[DisplaySet]
+    ) -> tuple[list[list[DisplaySet]], list[int]]:
         fade_pos: list[int] = []
         fade_groups = self.__find_roi(members)
 
@@ -95,7 +98,7 @@ class FadeHandler:
             start = group[0].pcs.presentation_timestamp
             end = group[-1].pcs.presentation_timestamp
 
-            duration = end - start
+            duration: SubRipTime = end - start
             converted = float(f"{duration.seconds}.{duration.milliseconds}")
             delta = converted / len(group)
 
@@ -182,7 +185,6 @@ class SubtitleGroup:
         self.overlap = self.__find_overlap(members=members)
 
         end = members[-1]
-        global_palettes: dict[int, list[list[Palette]]] = {}
         global_palettes = self.__find_global_palettes(members=members)
 
         timelines: list[dict[str, list[TimelineItem]]] = []
@@ -381,7 +383,7 @@ class SubtitleGroup:
 
     def __define_overlapping(
         self, members: list[DisplaySet], reset_pos: list[int], redef_pos: list[int]
-    ):
+    ) -> tuple[dict[int, list[DisplaySet]], list[int], list[int]]:
         acquisition_point_present = self.__acquisition_point_present(members=members)
         if acquisition_point_present != -1:
             new_reset: list[int] = []
@@ -423,7 +425,7 @@ class SubtitleGroup:
             List containing PgsSubtitleItems which will eventual contain the text extracted from
             the PGS image.
         """
-        self.occurrences = Counter()
+        self.occurrences: Counter[str] = Counter()
         items: list[PgsSubtitleItem] = []
 
         for timeline in timelines:
@@ -460,7 +462,7 @@ class Pgs:
     def __init__(
         self,
         tmp_location: str,
-        temp_folder="tmp",
+        temp_folder: str = "tmp",
     ):
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
@@ -503,7 +505,7 @@ class Pgs:
             self.dump_display_sets(display_sets=display_sets)
 
         groups: list[list[DisplaySet]] = []
-        tmp = []
+        tmp: list[DisplaySet] = []
         for ds in display_sets:
             if (
                 ds.is_start()
@@ -513,7 +515,7 @@ class Pgs:
                 tmp.append(ds)
             elif (
                 len(ds.ods_segments) == 0
-                #and len(ds.pds_segments) == 0
+                # and len(ds.pds_segments) == 0
                 and ds.is_normal()
                 and ds.pcs.size == 11
             ):
@@ -536,7 +538,7 @@ class Pgs:
 
         return res
 
-    def dump_display_sets(self, display_sets: list[DisplaySet], path=""):
+    def dump_display_sets(self, display_sets: list[DisplaySet], path: str = ""):
         """
         Dumps DisplaySets contained in PGS file as .txt and .json
         """
@@ -564,8 +566,8 @@ class Pgs:
                 default=str,
             )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__} [{self}]>"
 
-    def __enter__(self):
+    def __enter__(self) -> Pgs:
         return self

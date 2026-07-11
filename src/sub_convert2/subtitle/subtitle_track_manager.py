@@ -3,7 +3,7 @@ from pathlib import Path
 import logging
 import typing
 
-from pymkv import MKVFile
+from pymkv import MKVFile, MKVTrack
 
 from sub_convert2.pgs.pgs_manager import PgsManager
 
@@ -20,11 +20,11 @@ class SubtitleTrackManager:
         file_path: Path,
     ):
         self.mkv_file = MKVFile(file_path=file_path)
-        self.tracks = (
+        self.tracks: typing.Iterable[MKVTrack] = (
             track
             for track in self.mkv_file.tracks
             if track.track_type == "subtitles" and track.track_codec == "HDMV PGS"
         )
 
-    def get_pgs_managers(self, options: dict) -> typing.Generator:
+    def get_pgs_managers(self, options: dict) -> typing.Iterable[PgsManager]:
         return (PgsManager(mkv_track=track, options=options) for track in self.tracks)

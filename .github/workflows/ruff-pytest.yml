@@ -5,6 +5,8 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment:
+      name: default
     strategy:
       matrix:
         python-version: ["3.14"]

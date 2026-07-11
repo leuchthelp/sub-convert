@@ -3,6 +3,7 @@ import logging
 import typing
 import enum
 
+from pysrt.srttime import SubRipTime
 from numpy import ndarray
 import numpy as np
 
@@ -48,7 +49,7 @@ class PgsReader:
     __slots__ = ()
 
     @classmethod
-    def read_segments(cls, data: bytes):
+    def read_segments(cls, data: bytes) -> typing.Iterable[BaseSegment]:
         count = 0
         b = data
         while b:
@@ -69,7 +70,7 @@ class PgsReader:
             b = b[size:]
 
     @classmethod
-    def decode(cls, data: bytes):
+    def decode(cls, data: bytes) -> typing.Iterable[DisplaySet]:
         segments: list[BaseSegment] = []
         index = 0
         for s in cls.read_segments(data):
@@ -89,13 +90,15 @@ class PgsImage:
         self._data: None | ndarray = None
 
     @property
-    def data(self) -> ndarray:
+    def data(self) -> ndarray[tuple[typing.Any, ...], np.dtype[np._ScalarT]]:
         if self._data is None:
             self._data = self.decode_rle_image(self.rle_data, self.palettes)
         return self._data
 
     @classmethod
-    def decode_rle_image(cls, data: bytes, palettes: list[Palette]) -> ndarray:
+    def decode_rle_image(
+        cls, data: bytes, palettes: list[Palette]
+    ) -> ndarray[tuple[typing.Any, ...], np.dtype[np._ScalarT]]:
         image_array: list[int] = []
         dimension = 4
         cols = 1
@@ -115,25 +118,24 @@ class PgsImage:
             delta = (cols * rows * dimension - len(image_array)) // dimension
             image_array.extend((*cls.get_color(palettes[0]), palettes[0].alpha) * delta)
 
-        img = np.array(image_array, dtype=np.uint8).reshape((rows, cols, dimension))
-        return img
+        return np.array(image_array, dtype=np.uint8).reshape((rows, cols, dimension))
 
     @classmethod
-    def ycbcr_to_rgb(cls, y, cb, cr):
+    def ycbcr_to_rgb(cls, y, cb, cr) -> tuple[int, ...]:
         r = y + 1.402 * (cr - 128)
         g = y - 0.344136 * (cb - 128) - 0.714136 * (cr - 128)
         b = y + 1.772 * (cb - 128)
         r = int(max(0, min(0xFF, r)))
         g = int(max(0, min(0xFF, g)))
         b = int(max(0, min(0xFF, b)))
-        return (r, g, b)
+        return r, g, b
 
     @classmethod
-    def get_color(cls, palette: Palette):
+    def get_color(cls, palette: Palette) -> tuple[int, ...]:
         return cls.ycbcr_to_rgb(*palette[:3])
 
     @classmethod
-    def decode_rle_position(cls, data: bytes, i: int):
+    def decode_rle_position(cls, data: bytes, i: int) -> tuple[int, ...]:
         first = safe_get(data, i)
         if first:
             return 1, first, 1
@@ -152,7 +154,7 @@ class PgsImage:
         return ((second - 192) << 8) + third, fourth, 4
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, ...]:
         return self.data.shape
 
 
@@ -163,26 +165,26 @@ class BaseSegment:
         self.raw = b
 
     @property
-    def presentation_timestamp(self):
+    def presentation_timestamp(self) -> SubRipTime:
         return to_time(from_hex(self.raw[2:6]) // 90)
 
     @property
-    def decoding_timestamp(self):
+    def decoding_timestamp(self) -> SubRipTime:
         return to_time(from_hex(self.raw[6:10]) // 90)
 
     @property
-    def type(self):
+    def type(self) -> SegmentType:
         return SegmentType(self.raw[10])
 
     @property
-    def size(self):
+    def size(self) -> int:
         return from_hex(self.raw[11:13])
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         return self.raw[13:]
 
-    def to_json(self):
+    def to_json(self) -> dict:
         attributes = {
             "type": "type",
             "pts": "presentation_timestamp",
@@ -203,11 +205,8 @@ class BaseSegment:
     def attributes(self):
         raise NotImplementedError
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.size
-
-    def __bool__(self):
-        return True
 
     def __str__(self):
         strings = []
@@ -243,7 +242,7 @@ class PresentationCompositionSegment(BaseSegment):
                 self.crop_width = from_hex(b[12:14])
                 self.crop_height = from_hex(b[14:16])
 
-        def attributes(self):
+        def attributes(self) -> dict[str, str]:
             return {
                 "object_id": "object_id",
                 "window_id": "window_id",
@@ -257,35 +256,35 @@ class PresentationCompositionSegment(BaseSegment):
             }
 
     @property
-    def width(self):
+    def width(self) -> int:
         return from_hex(self.data[0:2])
 
     @property
-    def height(self):
+    def height(self) -> int:
         return from_hex(self.data[2:4])
 
     @property
-    def frame_rate(self):
+    def frame_rate(self) -> int:
         return self.data[4]
 
     @property
-    def composition_number(self):
+    def composition_number(self) -> int:
         return from_hex(self.data[5:7])
 
     @property
-    def composition_state(self):
+    def composition_state(self) -> CompositionState:
         return CompositionState(self.data[7])
 
     @property
-    def palette_update(self):
+    def palette_update(self) -> bool:
         return bool(self.data[8])
 
     @property
-    def palette_id(self):
+    def palette_id(self) -> int:
         return self.data[9]
 
     @property
-    def number_composition_objects(self):
+    def number_composition_objects(self) -> int:
         return self.data[10]
 
     @property
@@ -462,25 +461,25 @@ class DisplaySet:
         self.segments = segments
 
     @property
-    def pcs(self):
+    def pcs(self) -> PresentationCompositionSegment:
         return [
             s for s in self.segments if isinstance(s, PresentationCompositionSegment)
         ][0]
 
     @property
-    def wds(self):
+    def wds(self) -> WindowDefinitionSegment:
         return [s for s in self.segments if isinstance(s, WindowDefinitionSegment)][0]
 
     @property
-    def pds_segments(self):
+    def pds_segments(self) -> list[PaletteDefinitionSegment]:
         return [s for s in self.segments if isinstance(s, PaletteDefinitionSegment)]
 
     @property
-    def ods_segments(self):
+    def ods_segments(self) -> list[ObjectDefinitionSegment]:
         return [s for s in self.segments if isinstance(s, ObjectDefinitionSegment)]
 
     @property
-    def end(self):
+    def end(self) -> EndSegment:
         return [s for s in self.segments if isinstance(s, EndSegment)][0]
 
     def is_start(self):

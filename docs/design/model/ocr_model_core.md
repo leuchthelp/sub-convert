@@ -1,1 +1,1 @@
-::: src.sub_convert.model.ocr_model_core
+::: src.sub_convert2.model.ocr_model_core
