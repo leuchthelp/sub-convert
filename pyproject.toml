@@ -1,6 +1,6 @@
 [project]
 name = "sub-convert2"
-version = "0.1.0rc1"
+version = "0.1.0rc2"
 description = "convert image-based subtitles to text-based via OCR and language recognition"
 readme = "README.md"
 authors = [{ name = "leuchthelp", email = "gfpinthehouse@gmail.com" }]
@@ -84,21 +84,25 @@ members = ["sub-convert"]
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+publish-url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
 name = "torch-cuda"
 url = "https://download.pytorch.org/whl/cu132"
+publish-url = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 [[tool.uv.index]]
 name = "torch-openvino"
 url = "https://download.pytorch.org/whl/xpu"
+publish-url = "https://download.pytorch.org/whl/xpu"
 explicit = true
 
 [[tool.uv.index]]
 name = "torch-rocm"
 url = "https://download.pytorch.org/whl/rocm7.2"
+publish-url = "https://download.pytorch.org/whl/rocm7.2"
 explicit = true
 
 [build-system]
