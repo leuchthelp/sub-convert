@@ -1,42 +1,44 @@
-from datetime import datetime, timedelta
-from threading import Thread, Event
-from itertools import chain
-from pathlib import Path
-import importlib
 import argparse
+import importlib
 import inspect
 import logging
-import time
 import os
 import re
+import sys
+import time
+from datetime import datetime, timedelta
+from itertools import chain
+from pathlib import Path
+from queue import Empty
+from threading import Event, Thread
 
-
-from torch.multiprocessing import Process, Queue, Manager, Pool, set_start_method
+import torch.multiprocessing as mp
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    Task,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.traceback import install as install_rich_traceback
 from rich_argparse import RichHelpFormatter
-from rich.progress import TaskID, Task
-from rich.logging import RichHandler
-from rich.console import Console
-from rich.progress import (
-    Progress,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-    TimeRemainingColumn,
-    MofNCompleteColumn,
-    TimeElapsedColumn,
-)
-from queue import Empty
-import torch.multiprocessing as mp
+from torch.multiprocessing import Manager, Pool, Process, Queue, set_start_method
 
-
-from sub_convert2.model.workers import OCRGPUWorker, LanguageGPUWorker, CPUWorker
+from sub_convert2.model import language_model_core, ocr_model_core
+from sub_convert2.model.workers import CPUWorker, LanguageGPUWorker, OCRGPUWorker
 from sub_convert2.subtitle.subtitle_track_manager import SubtitleTrackManager
-from sub_convert2.model import ocr_model_core, language_model_core
-
 
 logging.basicConfig(
-    level=logging.CRITICAL, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
+    level=logging.CRITICAL,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -65,45 +67,41 @@ def check_aged(path: Path, offset: str) -> bool:
             if tmp[0]:
                 delta = tmp[0]
             int_offset = int(tmp[1] + tmp[2])
-    except KeyError as e:
-        raise e
+    except KeyError:
+        raise
     except ValueError as e:
         raise ValueError(
-            (
-                f"Incorrect usage of -S, --skip_aged argument. {tmp} is not an"
-                + "integer value. At least positive integer value is necessary!"
-            )
+            f"Incorrect usage of -S, --skip_aged argument. {tmp} is not an"
+            + "integer value. At least positive integer value is necessary!"
         ) from e
 
-    cutoff = datetime.now()
+    cutoff = datetime.now().astimezone()
     match delta:
         case w if w in ["s", "S", "second", "Second", "seconds", "Seconds"]:
-            cutoff = datetime.now() - timedelta(seconds=abs(int_offset))
+            cutoff = datetime.now().astimezone() - timedelta(seconds=abs(int_offset))
         case w if w in ["m", "minute", "Minute", "minutes", "Minutes"]:
-            cutoff = datetime.now() - timedelta(minutes=abs(int_offset))
+            cutoff = datetime.now().astimezone() - timedelta(minutes=abs(int_offset))
         case w if w in ["h", "H", "hour", "Hour", "hours", "Hours"]:
-            cutoff = datetime.now() - timedelta(hours=abs(int_offset))
+            cutoff = datetime.now().astimezone() - timedelta(hours=abs(int_offset))
         case w if w in ["d", "D", "day", "Day", "days", "Days"]:
-            cutoff = datetime.now() - timedelta(days=abs(int_offset))
+            cutoff = datetime.now().astimezone() - timedelta(days=abs(int_offset))
         case w if w in ["w", "W", "week", "Week", "weeks", "Weeks"]:
-            cutoff = datetime.now() - timedelta(days=abs(int_offset))
+            cutoff = datetime.now().astimezone() - timedelta(days=abs(int_offset))
         case w if w in ["M", "month", "Month", "months", "Months"]:
-            cutoff = datetime.now() - timedelta(days=abs(int_offset * 30))
+            cutoff = datetime.now().astimezone() - timedelta(days=abs(int_offset * 30))
         case w if w in ["y", "Y", "year", "Year", "years", "Years"]:
-            cutoff = datetime.now() - timedelta(days=abs(int_offset * 365))
+            cutoff = datetime.now().astimezone() - timedelta(days=abs(int_offset * 365))
 
     tmp_name = str(path.name).replace(".mkv", "")
     for file in Path(path.parent).glob("*.srt"):
         if tmp_name in file.name:
-            file_age = datetime.fromtimestamp(file.stat().st_mtime)
-            if (
+            file_age = datetime.fromtimestamp(file.stat().st_mtime).astimezone()
+            return bool(
                 int_offset > 0
                 and file_age < cutoff
                 or int_offset < 0
                 and file_age > cutoff
-            ):
-                return True
-            return False
+            )
     return True
 
 
@@ -328,14 +326,12 @@ def sub_convert():
         logger.warning(
             "No files to convert found, if you expected files to be converted, check if that path is accessible."
         )
-        exit()
+        sys.exit()
 
     logger.info("Files to convert found, setting up ModelCore, this can take a while.")
     pgs_managers = chain.from_iterable(
-        (
-            SubtitleTrackManager(file_path=path).get_pgs_managers(options=options)
-            for path in convertibles
-        )
+        SubtitleTrackManager(file_path=path).get_pgs_managers(options=options)
+        for path in convertibles
     )
 
     # pgs_managers = [list(pgs_managers)[0]]
@@ -376,7 +372,7 @@ def sub_convert():
     gpu_core = gpu_core_class(options=options)
 
     logger.info(f"Setting up OCRModelCore: {gpu_core.__class__.__name__}")
-    for idx in range(0, gpu_ocr_workers):
+    for idx in range(gpu_ocr_workers):
         cess = Process(
             target=OCRGPUWorker(gpu_core, queues).run,  # type: ignore
             name=f"OCRGPU{idx}",
@@ -397,7 +393,7 @@ def sub_convert():
     lang_core = language_core_class(options=options)
 
     logger.info(f"Setting up LanguageModelCore: {lang_core.__class__.__name__}")
-    for idx in range(0, gpu_lang_workers):
+    for idx in range(gpu_lang_workers):
         cess = Process(
             target=LanguageGPUWorker(lang_core, queues).run,  # type: ignore
             name=f"LanguageGPU{idx}",

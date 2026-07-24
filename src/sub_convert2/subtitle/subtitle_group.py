@@ -1,21 +1,20 @@
-from dataclasses import dataclass
-from collections import Counter
-import logging
-import typing
 import json
+import logging
 import os
+from collections import Counter
+from dataclasses import dataclass
+from typing import Self
 
 from pysrt.srttime import SubRipTime
 
-from sub_convert2.pgs.pgs_segments import PgsReader, DisplaySet
-from sub_convert2.pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
+from sub_convert2.pgs.pgs_segments import DisplaySet, PgsReader
+from sub_convert2.pgs.pgs_subtitle_item import Palette, PgsSubtitleItem
 from sub_convert2.subtitle.timeline import (
     TimelineItem,
-    look_to_combine,
-    gen_timelines,
     fix_endpoints,
+    gen_timelines,
+    look_to_combine,
 )
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -124,8 +123,6 @@ class FadeHandler:
         item.display_obj = selected.ods_segments
         if selected.pds_segments:
             item.palette = selected.pds_segments[0].palettes
-        else:
-            item.palette
 
         return item
 
@@ -176,7 +173,7 @@ class SubtitleGroup:
         List of DisplaySets the SubtitleGroup wraps around.
     """
 
-    __slots__ = ("pgs_subtitle_items", "timelines", "overlap", "occurrences")
+    __slots__ = ("occurrences", "overlap", "pgs_subtitle_items", "timelines")
 
     def __init__(
         self,
@@ -345,14 +342,11 @@ class SubtitleGroup:
                 ds.pcs.size in [19, 27]
                 and ds.pcs.number_composition_objects in [1, 2]
                 and ds.ods_segments
-                # and ds.pds_segments
+                and index - 1 in reset_pos
+                or ds.pcs.is_start()
+                or ds.pcs.is_acquisition_point()
             ):
-                if (
-                    index - 1 in reset_pos
-                    or ds.pcs.is_start()
-                    or ds.pcs.is_acquisition_point()
-                ):
-                    redef_positions.append(index)
+                redef_positions.append(index)
 
         return redef_positions
 
@@ -429,7 +423,7 @@ class SubtitleGroup:
         items: list[PgsSubtitleItem] = []
 
         for timeline in timelines:
-            for _, entries in timeline.items():
+            for entries in timeline.values():
                 for element in entries:
                     self.occurrences.update((element.position,))
                     items.append(element.gen_pgs_subtitle_item())
@@ -452,11 +446,11 @@ class Pgs:
     """
 
     __slots__ = (
-        "tmp_location",
-        "temp_folder",
         "_items",
-        "subtitle_groups",
         "occurrences",
+        "subtitle_groups",
+        "temp_folder",
+        "tmp_location",
     )
 
     def __init__(
@@ -466,7 +460,7 @@ class Pgs:
     ):
         self.tmp_location = tmp_location
         self.temp_folder = temp_folder
-        self._items: typing.Optional[list[PgsSubtitleItem]] = None
+        self._items: list[PgsSubtitleItem] | None = None
         self.occurrences: Counter[str] = Counter()
 
     @property
@@ -569,5 +563,5 @@ class Pgs:
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} [{self}]>"
 
-    def __enter__(self) -> Pgs:
+    def __enter__(self) -> Self:
         return self

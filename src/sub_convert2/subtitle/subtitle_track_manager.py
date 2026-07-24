@@ -1,7 +1,7 @@
-from dataclasses import dataclass
-from pathlib import Path
 import logging
 import typing
+from dataclasses import dataclass
+from pathlib import Path
 
 from pymkv import MKVFile, MKVTrack
 

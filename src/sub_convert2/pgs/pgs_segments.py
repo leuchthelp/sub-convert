@@ -1,14 +1,13 @@
-from dataclasses import dataclass
+import enum
 import logging
 import typing
-import enum
+from dataclasses import dataclass
 
-from pysrt.srttime import SubRipTime
-from numpy import ndarray
 import numpy as np
+from numpy import ndarray
+from pysrt.srttime import SubRipTime
 
 from sub_convert2.utils.utils import from_hex, safe_get, to_time
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -82,7 +81,7 @@ class PgsReader:
 
 
 class PgsImage:
-    __slots__ = ("rle_data", "palettes", "_data")
+    __slots__ = ("_data", "palettes", "rle_data")
 
     def __init__(self, data: bytes, palettes: list[Palette]):
         self.rle_data = data
@@ -90,7 +89,7 @@ class PgsImage:
         self._data: None | ndarray = None
 
     @property
-    def data(self) -> ndarray[tuple[typing.Any, ...], np.dtype[np._ScalarT]]:
+    def data(self) -> ndarray[tuple[typing.Any, ...], np.dtype]:
         if self._data is None:
             self._data = self.decode_rle_image(self.rle_data, self.palettes)
         return self._data
@@ -98,7 +97,7 @@ class PgsImage:
     @classmethod
     def decode_rle_image(
         cls, data: bytes, palettes: list[Palette]
-    ) -> ndarray[tuple[typing.Any, ...], np.dtype[np._ScalarT]]:
+    ) -> ndarray[tuple[typing.Any, ...], np.dtype]:
         image_array: list[int] = []
         dimension = 4
         cols = 1
@@ -462,13 +461,13 @@ class DisplaySet:
 
     @property
     def pcs(self) -> PresentationCompositionSegment:
-        return [
+        return next(
             s for s in self.segments if isinstance(s, PresentationCompositionSegment)
-        ][0]
+        )
 
     @property
     def wds(self) -> WindowDefinitionSegment:
-        return [s for s in self.segments if isinstance(s, WindowDefinitionSegment)][0]
+        return next(s for s in self.segments if isinstance(s, WindowDefinitionSegment))
 
     @property
     def pds_segments(self) -> list[PaletteDefinitionSegment]:
@@ -480,7 +479,7 @@ class DisplaySet:
 
     @property
     def end(self) -> EndSegment:
-        return [s for s in self.segments if isinstance(s, EndSegment)][0]
+        return next(s for s in self.segments if isinstance(s, EndSegment))
 
     def is_start(self):
         return self.pcs.is_start()

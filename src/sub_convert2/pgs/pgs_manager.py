@@ -1,24 +1,23 @@
-from subprocess import CalledProcessError
-from dataclasses import dataclass
+import hashlib
+import logging
+import shutil
+import subprocess
+import sys
+import typing
 from collections import Counter
+from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-import subprocess
-import logging
-import hashlib
-import typing
-import shutil
-import sys
+from subprocess import CalledProcessError
 
-from pysrt import SubRipFile, SubRipItem, SubRipTime
-from PIL import Image, ImageOps
-from langcodes import Language
-from pymkv import MKVTrack
 import numpy as np
+from langcodes import Language
+from PIL import Image, ImageOps
+from pymkv import MKVTrack
+from pysrt import SubRipFile, SubRipItem, SubRipTime
 
-from sub_convert2.subtitle.subtitle_group import SubtitleGroup, TimelineItem, Pgs
 from sub_convert2.pgs.pgs_subtitle_item import PgsSubtitleItem
-
+from sub_convert2.subtitle.subtitle_group import Pgs, SubtitleGroup, TimelineItem
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -34,12 +33,12 @@ def is_between(start: SubRipTime, end: SubRipTime, now: SubRipTime) -> bool:
 @dataclass
 class PgsManager:
     __slots__ = (
-        "mkv_track",
-        "tmp_path",
-        "pgs",
-        "hash",
-        "overwrite_if_exists",
         "dump_debug",
+        "hash",
+        "mkv_track",
+        "overwrite_if_exists",
+        "pgs",
+        "tmp_path",
     )
 
     def __init__(
@@ -50,14 +49,9 @@ class PgsManager:
         self.mkv_track = mkv_track
         self.hash = hashlib.sha256(str(self.mkv_track).encode()).hexdigest()
         self.tmp_path = Path(f"{options['path_to_tmp']}/{self.hash}")
-        self.overwrite_if_exists = (
-            options["overwrite_if_exists"]
-            if "overwrite_if_exists" in options
-            else False
-        )
-        self.dump_debug: bool = (
-            options["dump_debug"] if "dump_debug" in options else False
-        )
+        self.overwrite_if_exists: bool = options.get("overwrite_if_exists", False)
+
+        self.dump_debug: bool = options.get("dump_debug", False)
 
         if self.tmp_path.exists():
             shutil.rmtree(self.tmp_path)
@@ -82,11 +76,9 @@ class PgsManager:
                 debug_path = Path("debug")
                 debug_path.mkdir(parents=True, exist_ok=True)
                 path = Path(
-                    (
-                        f"{debug_path}/{self.hash[0:6]}"
-                        + f"-{Path(self.mkv_track.file_path).name}"
-                        + f"-{self.mkv_track.track_id}"
-                    )
+                    f"{debug_path}/{self.hash[0:6]}"
+                    + f"-{Path(self.mkv_track.file_path).name}"
+                    + f"-{self.mkv_track.track_id}"
                 ).absolute()
                 path.mkdir(parents=True, exist_ok=True)
 
@@ -130,8 +122,8 @@ class PgsManager:
     def __debug_vis_timelines(self, subtitle_groups: list[SubtitleGroup]):
         from datetime import datetime
 
-        import plotly.express as px
         import pandas as pd
+        import plotly.express as px
 
         df = pd.DataFrame()
 
@@ -142,14 +134,16 @@ class PgsManager:
                     tmp = pd.DataFrame(
                         data={
                             "start": [
-                                datetime.strptime(
-                                    str(item.start), formatting
-                                ).isoformat(timespec="microseconds")
+                                datetime
+                                .strptime(str(item.start), formatting)
+                                .astimezone()
+                                .isoformat(timespec="microseconds")
                             ],
                             "end": [
-                                datetime.strptime(str(item.end), formatting).isoformat(
-                                    timespec="microseconds"
-                                )
+                                datetime
+                                .strptime(str(item.end), formatting)
+                                .astimezone()
+                                .isoformat(timespec="microseconds")
                             ],
                             "placement": [item.position],
                             "text": [item.text],
@@ -178,11 +172,9 @@ class PgsManager:
         debug_path.mkdir(parents=True, exist_ok=True)
 
         path = Path(
-            (
-                f"{debug_path}/{self.hash[0:6]}"
-                + f"-{Path(self.mkv_track.file_path).name}"
-                + f"-{self.mkv_track.track_id}"
-            )
+            f"{debug_path}/{self.hash[0:6]}"
+            + f"-{Path(self.mkv_track.file_path).name}"
+            + f"-{self.mkv_track.track_id}"
         )
         path.mkdir(parents=True, exist_ok=True)
         df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
@@ -335,10 +327,8 @@ class PgsManager:
                 items = self.__gen_srt_items(subtitle_groups=subtitle_groups)
             case "ass":
                 raise ValueError(
-                    (
-                        f"Format {export_as} currently not supported. "
-                        + "Support will be added in the future"
-                    )
+                    f"Format {export_as} currently not supported. "
+                    + "Support will be added in the future"
                 )
             case _:
                 raise ValueError(f"Format {export_as} not valid or supported!")

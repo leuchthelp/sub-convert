@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from sub_convert2.model import ocr_model_core, language_model_core
 from sub_convert2.cli import (
-    check_if_adjacent_exists,
     check_aged,
+    check_if_adjacent_exists,
     get_candidates,
     get_classes,
     import_class,
 )
+from sub_convert2.model import language_model_core, ocr_model_core
 
 
 def test_check_aged_pos_offset():

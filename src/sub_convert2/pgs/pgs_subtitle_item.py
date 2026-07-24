@@ -2,12 +2,11 @@ import logging
 import typing
 
 from sub_convert2.pgs.pgs_segments import (
-    PresentationCompositionSegment,
     ObjectDefinitionSegment,
-    PgsImage,
     Palette,
+    PgsImage,
+    PresentationCompositionSegment,
 )
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -15,12 +14,12 @@ logger.setLevel(logging.INFO)
 
 class PgsSubtitleItem:
     __slots__ = (
+        "display_set",
         "image",
+        "lang_estimate",
+        "text",
         "x_offset",
         "y_offset",
-        "text",
-        "display_set",
-        "lang_estimate",
     )
 
     def __init__(

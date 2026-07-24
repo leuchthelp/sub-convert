@@ -1,14 +1,14 @@
-from dataclasses import dataclass
 import typing
+from dataclasses import dataclass
 
 from pysrt import SubRipTime
 
-from sub_convert2.pgs.pgs_subtitle_item import PgsSubtitleItem, Palette
 from sub_convert2.pgs.pgs_segments import (
     DisplaySet,
-    WindowDefinitionSegment,
     PresentationCompositionSegment,
+    WindowDefinitionSegment,
 )
+from sub_convert2.pgs.pgs_subtitle_item import Palette, PgsSubtitleItem
 
 
 @dataclass
@@ -38,7 +38,7 @@ class TimelineItem:
         comp_obj: PresentationCompositionSegment.CompositionObject | None = None,
         window: WindowDefinitionSegment.Window | None = None,
         ds: DisplaySet | None = None,
-        end: SubRipTime = SubRipTime(),
+        end: SubRipTime = SubRipTime(),  # noqa: B008
     ):
         self.start = start
         self.end = end  # will be overwritten by the following TimelineItem item
@@ -259,7 +259,7 @@ def fix_endpoints(
     dict
         Dictionary containing TimelineItems displayed in either Top or Bottom window.
     """
-    for _, items in fixables.items():
+    for items in fixables.values():
         fixable = items[-1]
         if not reset_statements.pcs.composition_objects:
             fixable.end = end.pcs.presentation_timestamp
@@ -286,9 +286,12 @@ def __combine(
 ):
     prev = previous[pos][-1]
     curr = current[pos][0]
-    if prev.end == curr.start and prev.comp_obj.object_id == curr.comp_obj.object_id:
-        if not curr.display_obj:
-            curr.display_obj = prev.display_obj
+    if (
+        prev.end == curr.start
+        and prev.comp_obj.object_id == curr.comp_obj.object_id
+        and not curr.display_obj
+    ):
+        curr.display_obj = prev.display_obj
 
 
 def look_to_combine(
