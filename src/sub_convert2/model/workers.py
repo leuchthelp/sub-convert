@@ -1,16 +1,15 @@
-from dataclasses import dataclass
-from pathlib import Path
 import logging
-
-from torch.multiprocessing import current_process, Queue
+from dataclasses import dataclass
 from multiprocessing.synchronize import Event
+from pathlib import Path
 from queue import Empty
-from PIL import Image
 
-from sub_convert2.pgs.pgs_manager import PgsManager, PgsSubtitleItem
+from PIL import Image
+from torch.multiprocessing import Queue, current_process
+
 from sub_convert2.model.language_model_core import LanguageModelCore
 from sub_convert2.model.ocr_model_core import OCRModelCore
-
+from sub_convert2.pgs.pgs_manager import PgsManager, PgsSubtitleItem
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -18,7 +17,7 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class OCRGPUWorker:
-    __slots__ = ("process_queue", "pass_queue", "core")
+    __slots__ = ("core", "pass_queue", "process_queue")
 
     def __init__(
         self,
@@ -68,7 +67,7 @@ class OCRGPUWorker:
 
 @dataclass
 class LanguageGPUWorker:
-    __slots__ = ("pass_queue", "queues", "core")
+    __slots__ = ("core", "pass_queue", "queues")
 
     def __init__(
         self,
@@ -99,9 +98,9 @@ class LanguageGPUWorker:
 class CPUWorker:
     __slots__ = (
         "gpu_ocr_queue",
+        "progress_queue",
         "queues",
         "task_queue",
-        "progress_queue",
     )
 
     def __init__(
@@ -145,11 +144,11 @@ class CPUWorker:
             text, combined, index = return_queue.get()
 
             self.progress_queue.put(
-                (
+                
                     f"[cyan]{pgs_manager.hash[0:6]}"
                     + f"-{Path(pgs_manager.mkv_track.file_path).name}"
                     + f"-{pgs_manager.mkv_track.track_id}"
-                )
+                
             )
 
             if not text:

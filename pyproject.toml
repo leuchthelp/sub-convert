@@ -49,6 +49,8 @@ rocm = [
     "torchvision",
     "triton-rocm>=3.7.1",
     "transformers>=5.12.1",
+    "amd-aiter",
+    "iris",
 ]
 
 [tool.uv]
@@ -77,6 +79,8 @@ torchvision = [
 
 triton-rocm = [{ index = "torch-rocm", extra = "rocm" }]
 triton-xpu = [{ index = "torch-openvino", extra = "openvino" }]
+amd-aiter = { git = "https://github.com/ROCm/aiter.git" }
+iris = { git = "https://github.com/ROCm/iris.git" }
 
 [tool.uv.workspace]
 members = ["sub-convert"]

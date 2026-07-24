@@ -1,7 +1,7 @@
-from importlib.util import find_spec
-from dataclasses import dataclass
 import logging
 import os
+from dataclasses import dataclass
+from importlib.util import find_spec
 
 from PIL import Image
 
@@ -37,10 +37,10 @@ class OCRModelCore:
         del self
 
 
-from transformers import AutoModelForImageTextToText, AutoProcessor  # noqa: E402
-import torch  # noqa: E402
+import torch
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-from sub_convert2.utils.torch_utils import check_torch_cuda  # noqa: E402
+from sub_convert2.utils.torch_utils import check_torch_cuda
 
 
 @dataclass
@@ -134,7 +134,7 @@ class PaddleModelCore(OCRModelCore):
 
 @dataclass
 class PaddlePaddleModelCore(OCRModelCore):
-    __slots__ = ("model", "model_name", "language")
+    __slots__ = ("language", "model", "model_name")
 
     import numpy as np
 

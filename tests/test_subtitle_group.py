@@ -1,13 +1,10 @@
 from pathlib import Path
 
-from pysrt import SubRipTime
 import py7zr
+from pysrt import SubRipTime
 
-from sub_convert2.subtitle.subtitle_group import SubtitleGroup
-from sub_convert2.subtitle.subtitle_group import TimelineItem
-from sub_convert2.subtitle.subtitle_group import Pgs
 from sub_convert2.pgs.pgs_segments import PgsReader
-
+from sub_convert2.subtitle.subtitle_group import Pgs, SubtitleGroup, TimelineItem
 
 tmp_location = Path("tests/files/for-pgs/test.sup")
 if not tmp_location.exists():

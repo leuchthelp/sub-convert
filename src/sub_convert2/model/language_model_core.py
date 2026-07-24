@@ -1,8 +1,8 @@
-from importlib.util import find_spec
-from dataclasses import dataclass
 import logging
-import typing
 import os
+import typing
+from dataclasses import dataclass
+from importlib.util import find_spec
 
 # os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -63,7 +63,7 @@ STATIC_LANGUAGES = [
 class LanguageModelCore:
     __slots__ = ("detector", "options")
 
-    from lingua import Language, LanguageDetectorBuilder, LanguageDetector
+    from lingua import Language, LanguageDetector, LanguageDetectorBuilder
 
     def __init__(
         self,
@@ -97,15 +97,15 @@ class LanguageModelCore:
         del self
 
 
-from transformers import AutoTokenizer, AutoModelForSequenceClassification  # noqa: E402
-import torch  # noqa: E402
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from sub_convert2.utils.torch_utils import check_torch_cuda  # noqa: E402
+from sub_convert2.utils.torch_utils import check_torch_cuda
 
 
 @dataclass
 class LangDetectModelCore(LanguageModelCore):
-    __slots__ = ("model", "tokenizer", "torch_device", "languages")
+    __slots__ = ("languages", "model", "tokenizer", "torch_device")
 
     def __init__(
         self,
