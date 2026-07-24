@@ -30,4 +30,4 @@ jobs:
         run: uv build
       # Check that basic features work and we didn't miss to include crucial files
       - name: Publish
-        run: uv publish --index torch-cpu torch-cuda torch-openvino torch-rocm
+        run: uv publish
