@@ -148,7 +148,9 @@ class FadeHandler:
         window = group[0].wds.windows[-1]
         t_start = group[0].pcs.presentation_timestamp
         t_end = group[-1].pcs.presentation_timestamp
-        new_item = TimelineItem(t_start, comp_obj, window, group[0], end=t_end)
+        new_item = TimelineItem(
+            t_start, comp_obj, window=window, ds=group[0], end=t_end
+        )
 
         new_item = self.__guess_fade_in_out(group, new_item)
 
@@ -520,9 +522,9 @@ class Pgs:
         # Debug helper code
         # test_groups = list(range(82, 131))
         # test_groups = list(range(131, 159))
-        # test_groups = list(range(457, 468))
-        # sliced = [ds for group in groups for ds in group if ds.index in test_groups]
-        # self.subtitle_groups = [SubtitleGroup(members=sliced)]
+        #test_groups = list(range(457, 468))
+        #sliced = [ds for group in groups for ds in group if ds.index in test_groups]
+        #self.subtitle_groups = [SubtitleGroup(members=sliced)]
 
         self.subtitle_groups = [SubtitleGroup(members=group) for group in groups]
         res: list[PgsSubtitleItem] = []
