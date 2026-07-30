@@ -8,7 +8,7 @@
             "name": "Python Debugger: Default",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/sub_convert/__main__.py",
+            "program": "src/sub_convert2/__main__.py",
             "console": "integratedTerminal",
             "args":  ["-d", "-o"]
         },
@@ -16,7 +16,7 @@
             "name": "Python Debugger: With options",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/sub_convert/__main__.py",
+            "program": "src/sub_convert2/__main__.py",
             "console": "integratedTerminal",
             "args":  ["-d", "-o", "-p", "smb/jellyfin/shows/Terror in Resonance (2014)", "-cw", "1", "-ow", "2", "-lw", "2" , "-om", "PaddleModelCore"]
         },
@@ -24,7 +24,7 @@
             "name": "Python Debugger: Older/younger check",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/sub_convert/__main__.py",
+            "program": "src/sub_convert2/__main__.py",
             "console": "integratedTerminal",
             "args":  ["-a", "s+1", "-s"]
         },
@@ -32,7 +32,7 @@
             "name": "Python Debugger: Adjacent files check",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/sub_convert/__main__.py",
+            "program": "src/sub_convert2/__main__.py",
             "console": "integratedTerminal",
             "args":  ["-s"]
         },
@@ -40,7 +40,7 @@
             "name": "Python Debugger: Batchsize",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/sub_convert/__main__.py",
+            "program": "src/sub_convert2/__main__.py",
             "console": "integratedTerminal",
             "args":  ["-b", "8", "-o", "-om", "PaddleModelCore"]
         },

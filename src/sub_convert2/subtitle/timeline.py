@@ -1,5 +1,6 @@
 import typing
 from dataclasses import dataclass
+from itertools import chain
 
 from pysrt import SubRipTime
 
@@ -38,8 +39,11 @@ class TimelineItem:
         comp_obj: PresentationCompositionSegment.CompositionObject | None = None,
         window: WindowDefinitionSegment.Window | None = None,
         ds: DisplaySet | None = None,
+        palette_id: int = 0,
         end: SubRipTime = SubRipTime(),  # noqa: B008
     ):
+        self.palette_id = palette_id
+        self.window = window
         self.start = start
         self.end = end  # will be overwritten by the following TimelineItem item
 
@@ -166,7 +170,6 @@ class TimelineItem:
 def __process_timeline_item(
     new_timeline: TimelineItem,
     timelines: dict[str, list[TimelineItem]],
-    ds: DisplaySet,
     global_palettes: dict[int, list[list[Palette]]],
 ) -> dict[str, list[TimelineItem]]:
     """
@@ -200,10 +203,35 @@ def __process_timeline_item(
             timelines[new_timeline.position].append(new_timeline)
     else:
         if not new_timeline.palette:
-            new_timeline.palette = global_palettes[ds.pcs.palette_id][0]
+            new_timeline.palette = global_palettes[new_timeline.palette_id][0]
         timelines[new_timeline.position] = [new_timeline]
 
     return timelines
+
+
+def __find_true_position(
+    per_window: list[TimelineItem],
+) -> list[TimelineItem]:
+
+    borders: dict[int, int] = {}
+    for current in per_window:
+        window_id = current.comp_obj.window_id
+        y_offset = current.comp_obj.y_offset
+        if window_id not in borders:
+            borders[window_id] = y_offset
+        else:
+            borders[window_id] = min(borders[window_id], y_offset)
+
+    for item in per_window:
+        window_id = item.comp_obj.window_id
+        y_offset = item.comp_obj.y_offset
+
+        if y_offset > borders[window_id]:
+            item.position = "Top"
+        else:
+            item.position = "Bottom"
+
+    return per_window
 
 
 def gen_timelines(
@@ -221,8 +249,8 @@ def gen_timelines(
     dict
         Dictionary containing TimelineItems displayed in either Top or Bottom window.
     """
-    timelines: dict[str, list[TimelineItem]] = {}
 
+    per_window: dict[int, list[TimelineItem]] = {}
     for ds in members:
         for comp_obj in ds.pcs.composition_objects:
             for window in ds.wds.windows:
@@ -231,11 +259,23 @@ def gen_timelines(
                         window=window,
                         comp_obj=comp_obj,
                         start=ds.pcs.presentation_timestamp,
+                        palette_id=ds.pcs.palette_id,
                         ds=ds,
                     )
-                    timelines = __process_timeline_item(
-                        new_timeline, timelines, ds, global_palettes
-                    )
+
+                    if window.window_id not in per_window:
+                        per_window[window.window_id] = [new_timeline]
+                    else:
+                        per_window[window.window_id].append(new_timeline)
+
+    for window in per_window:  # noqa: PLC0206
+        tmp = __find_true_position(per_window[window])
+        per_window[window] = tmp
+
+    timelines: dict[str, list[TimelineItem]] = {}
+    timeline_items = chain.from_iterable(per_window.values())
+    for item in timeline_items:
+        timelines = __process_timeline_item(item, timelines, global_palettes)
 
     return timelines
 
@@ -298,6 +338,7 @@ def look_to_combine(
     timelines: list[dict[str, list[TimelineItem]]],
 ) -> list[dict[str, list[TimelineItem]]]:
     previous: dict[str, list[TimelineItem]] | None = None
+
     for timeline in timelines:
         if previous is None:
             previous = timeline
