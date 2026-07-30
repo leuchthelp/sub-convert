@@ -86,7 +86,7 @@ class PgsManager:
             self.pgs = Pgs(tmp_location=tmp_file, temp_folder=str(path))
 
             pgs_items = self.pgs.items
-            for _, item in enumerate(pgs_items):
+            for item in pgs_items:
                 # Expand border to ensure proper recognition if text is very close to image borders.
                 # Also invert as black-outline texts is saved inverted (as white-outline).
                 # This could help detection.

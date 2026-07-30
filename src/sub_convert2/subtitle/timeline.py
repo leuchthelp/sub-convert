@@ -1,5 +1,6 @@
 import typing
 from dataclasses import dataclass
+from itertools import chain, groupby
 
 from pysrt import SubRipTime
 
@@ -36,12 +37,27 @@ class TimelineItem:
         self,
         start: SubRipTime,
         comp_obj: PresentationCompositionSegment.CompositionObject | None = None,
+        og_comp_obj: list[PresentationCompositionSegment.CompositionObject]
+        | None = None,
         window: WindowDefinitionSegment.Window | None = None,
         ds: DisplaySet | None = None,
+        palette_id: int = 0,
         end: SubRipTime = SubRipTime(),  # noqa: B008
     ):
+        self.ds = ds
+        self.palette_id = palette_id
+        self.window = window
         self.start = start
         self.end = end  # will be overwritten by the following TimelineItem item
+        self.per_window_overlap_hint = False
+
+        if og_comp_obj is not None and len(og_comp_obj) > 1:
+            window_ids: list[int] = []
+            for obj in og_comp_obj:
+                window_ids.append(obj.window_id)
+
+            g = groupby(window_ids)
+            self.per_window_overlap_hint = next(g, True) and not next(g, False)
 
         if ds is not None and window is not None and comp_obj is not None:
             self.comp_obj = comp_obj
@@ -164,9 +180,8 @@ class TimelineItem:
 
 
 def __process_timeline_item(
-    new_timeline: TimelineItem,
+    new_items: list[TimelineItem],
     timelines: dict[str, list[TimelineItem]],
-    ds: DisplaySet,
     global_palettes: dict[int, list[list[Palette]]],
 ) -> dict[str, list[TimelineItem]]:
     """
@@ -186,24 +201,53 @@ def __process_timeline_item(
     dict
         Timelines dict once a new item has been processed.
     """
-    if new_timeline.position in timelines:
-        prev_timeline = timelines[new_timeline.position][-1]
-        prev_timeline.end = new_timeline.start
+    for item in new_items:
+        if item.position in timelines:
+            prev_timeline = timelines[item.position][-1]
+            prev_timeline.end = item.start
 
-        if new_timeline.comp_obj.object_id != prev_timeline.comp_obj.object_id:
-            if not new_timeline.palette:
-                new_timeline.palette = prev_timeline.palette
+            if item.comp_obj.object_id != prev_timeline.comp_obj.object_id:
+                if not item.palette:
+                    item.palette = prev_timeline.palette
 
-            if not new_timeline.display_obj:
-                new_timeline.display_obj = prev_timeline.display_obj
+                if not item.display_obj:
+                    item.display_obj = prev_timeline.display_obj
 
-            timelines[new_timeline.position].append(new_timeline)
-    else:
-        if not new_timeline.palette:
-            new_timeline.palette = global_palettes[ds.pcs.palette_id][0]
-        timelines[new_timeline.position] = [new_timeline]
+                timelines[item.position].append(item)
+        else:
+            if not item.palette:
+                item.palette = global_palettes[item.palette_id][0]
+            timelines[item.position] = [item]
 
     return timelines
+
+
+def __find_true_position(
+    hints: list[TimelineItem],
+) -> list[TimelineItem]:
+
+    borders: dict[int, int] = {}
+    for item in hints:
+        window_id = item.comp_obj.window_id
+        y_offset = item.comp_obj.y_offset
+        if window_id not in borders:
+            borders[window_id] = y_offset
+        else:
+            borders[window_id] = min(borders[window_id], y_offset)
+
+    for item in hints:
+        window_id = item.comp_obj.window_id
+        y_offset = item.comp_obj.y_offset
+
+        if y_offset <= borders[window_id]:
+            item.position = "Top"
+        else:
+            item.position = "Bottom"
+
+    if len(hints) > 1 and not hints[0].display_obj:
+        hints.remove(hints[0])
+
+    return hints
 
 
 def gen_timelines(
@@ -221,21 +265,52 @@ def gen_timelines(
     dict
         Dictionary containing TimelineItems displayed in either Top or Bottom window.
     """
-    timelines: dict[str, list[TimelineItem]] = {}
 
+    per_window_id: dict[int, list[TimelineItem]] = {}
+    timelines: dict[str, list[TimelineItem]] = {}
     for ds in members:
         for comp_obj in ds.pcs.composition_objects:
             for window in ds.wds.windows:
                 if window.window_id == comp_obj.window_id:
-                    new_timeline = TimelineItem(
+                    item = TimelineItem(
                         window=window,
                         comp_obj=comp_obj,
+                        og_comp_obj=ds.pcs.composition_objects,
                         start=ds.pcs.presentation_timestamp,
+                        palette_id=ds.pcs.palette_id,
                         ds=ds,
                     )
-                    timelines = __process_timeline_item(
-                        new_timeline, timelines, ds, global_palettes
-                    )
+
+                    if window.window_id not in per_window_id:
+                        per_window_id[window.window_id] = [item]
+                    else:
+                        per_window_id[window.window_id].append(item)
+
+    for window, items in per_window_id.items():
+        hints: list[TimelineItem] = []
+        residue: list[TimelineItem] = []
+        for item in items:
+            if item.per_window_overlap_hint:
+                hints.append(item)
+            else:
+                residue.append(item)
+
+        tmp = __find_true_position(hints)
+        tmp.extend(residue)
+        per_window_id[window] = tmp
+
+    per_window_pos: dict[str, list[TimelineItem]] = {}
+    for item in chain.from_iterable(per_window_id.values()):
+        if item.position not in per_window_pos:
+            per_window_pos[item.position] = [item]
+        else:
+            per_window_pos[item.position].append(item)
+
+    for key, items in per_window_pos.items():
+        per_window_pos[key] = sorted(items, key=lambda item: item.start)
+
+    for items in per_window_pos.values():
+        timelines = __process_timeline_item(items, timelines, global_palettes)
 
     return timelines
 
@@ -298,6 +373,7 @@ def look_to_combine(
     timelines: list[dict[str, list[TimelineItem]]],
 ) -> list[dict[str, list[TimelineItem]]]:
     previous: dict[str, list[TimelineItem]] | None = None
+
     for timeline in timelines:
         if previous is None:
             previous = timeline
@@ -306,7 +382,7 @@ def look_to_combine(
         if "Bottom" in timeline:
             __combine(previous=previous, current=timeline, pos="Bottom")
 
-        if "Top" in timeline:
+        if "Top" in timeline and "Top" in previous:
             __combine(previous=previous, current=timeline, pos="Top")
         previous = timeline
 
