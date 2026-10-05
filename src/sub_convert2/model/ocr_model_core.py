@@ -59,7 +59,7 @@ class PaddleModelCore(OCRModelCore):
 
         self.torch_device = options["torch_device"]
 
-        attn_implementation = "paged|sdpa"
+        attn_implementation = "sdpa"
 
         if find_spec("flash_attn") is not None and self.torch_device == "cuda":
             attn_implementation = "flash_attention_2"
