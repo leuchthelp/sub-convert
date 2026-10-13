@@ -20,6 +20,7 @@ wheels/
 *.svg
 *.html
 *.bin
+*.sub
 
 images
 tmp
