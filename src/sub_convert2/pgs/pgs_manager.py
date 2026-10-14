@@ -56,8 +56,6 @@ class PgsManager:
         if self.tmp_path.exists():
             shutil.rmtree(self.tmp_path)
 
-        self.pg: Pgs
-
     def get_pgs_images(self) -> list[tuple[Image.Image, PgsSubtitleItem]]:
         self.tmp_path.mkdir(parents=True)
         tmp_file = f"{self.tmp_path}/{Path(self.mkv_track.file_path).name}-{self.mkv_track.track_id}-{self.mkv_track.track_codec}.sup"
@@ -124,6 +122,7 @@ class PgsManager:
 
         import pandas as pd
         import plotly.express as px
+        import plotly.io as pio
 
         df = pd.DataFrame()
 
@@ -152,7 +151,7 @@ class PgsManager:
 
                     df = pd.concat([df, tmp], ignore_index=True)
 
-        # pio.get_chrome()
+        pio.get_chrome()
         fig = px.timeline(
             data_frame=df,
             x_start="start",
@@ -171,14 +170,15 @@ class PgsManager:
         debug_path = Path("debug")
         debug_path.mkdir(parents=True, exist_ok=True)
 
+        file_name = self.hash[0:6]
         path = Path(
-            f"{debug_path}/{self.hash[0:6]}"
+            f"{debug_path}/{file_name}"
             + f"-{Path(self.mkv_track.file_path).name}"
             + f"-{self.mkv_track.track_id}"
         )
         path.mkdir(parents=True, exist_ok=True)
-        df.to_json(f"{path.absolute()}/{self.hash[0:6]}.json")
-        fig.write_image(f"{path.absolute()}/quickview-{self.hash[0:6]}.svg")
+        df.to_json(f"{path.absolute()}/{file_name}.json")
+        fig.write_image(f"{path.absolute()}/quickview-{file_name}.svg")
 
     def __timeline_events(
         self, timeline: dict[str, list[TimelineItem]]
